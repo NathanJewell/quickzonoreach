@@ -6,10 +6,10 @@ FROM python:3.6
 RUN pip3 install numpy scipy matplotlib
 
 # copy current directory to docker
-COPY ./code /code
+COPY ./zonoreach /zonoreach
 
 ### As default command: run the tests ###
-CMD python3 /code/example_plot.py && python3 /code/example_compare.py && python3 /code/example_profile.py
+CMD python3 /examples/example_plot.py && python3 /examples/example_compare.py && python3 /examples/example_profile.py
 
 # USAGE:
 # Build container and name it 'quickzono':

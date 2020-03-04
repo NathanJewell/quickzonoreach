@@ -100,5 +100,7 @@ def to_discrete_time_mat(a_mat, b_mat, dt, quick=False):
                 col = expm_multiply(mat, init_state)
 
                 rv_b[:, c] = col[:dims]
+    
+
 
     return rv_a, rv_b

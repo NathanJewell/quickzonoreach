@@ -8,7 +8,7 @@ import math
 
 import matplotlib.pyplot as plt
 
-from zono import get_zonotope_reachset
+from zonoreach.zono import get_zonotope_reachset
 
 def main():
     'example to make quickzonoreach.png'
@@ -49,6 +49,7 @@ def main():
     for i, z in enumerate(zonotopes[1:]):
         label = 'Reach Set' if i == 0 else None
         z.plot(label=label)
+        
 
     plt.title('Quickzonoreach Output (example_plot.py)')
     plt.legend()

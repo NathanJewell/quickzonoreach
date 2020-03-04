@@ -5,9 +5,9 @@ zonotope functions
 import matplotlib.pyplot as plt
 import numpy as np
 
-from util import compress_init_box, Freezable, to_discrete_time_mat
+from .util import compress_init_box, Freezable, to_discrete_time_mat
 
-import kamenev
+from . import kamenev
 
 def get_zonotope_reachset(init_box, a_mat_list, b_mat_list, input_box_list, dt_list, save_list=None, quick=False):
     '''get the discrete-time zonotope reachable set at each time step
@@ -46,6 +46,8 @@ def get_zonotope_reachset(init_box, a_mat_list, b_mat_list, input_box_list, dt_l
 
         if save:
             rv.append(z.clone())
+        
+        print("DT Iteration completed.")
 
     return rv
 
@@ -115,7 +117,7 @@ class Zonotope(Freezable):
     def clone(self):
         'return a deep copy'
 
-        bounds_copy = [bounds.copy() for bounds in self.init_bounds]
+        bounds_copy = [[b for b in bounds] for bounds in self.init_bounds]
         
         rv = Zonotope(self.center, self.mat_t.copy(), bounds_copy)
 
@@ -128,11 +130,12 @@ class Zonotope(Freezable):
 
         # project vector (a generator) onto row, to check if it's positive or negative
         res_vec = np.dot(self.mat_t.transpose(), vector) # slow? since we're taking transpose
+        #print(res_vec)
 
         for res, row, ib in zip(res_vec, self.mat_t.transpose(), self.init_bounds):
             factor = ib[1] if res >= 0 else ib[0]
 
-            rv += factor * row
+            rv = rv + factor * row
 
         return rv
 
