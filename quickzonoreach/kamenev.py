@@ -8,6 +8,7 @@ May 16, 2019
 import numpy as np
 from scipy.spatial import ConvexHull
 
+
 def _get_orthonormal_rank(vecs, tol=1e-7):
     '''
     given a list of vecs, return a new vector orthonormal to them and the rank of the matrix
@@ -141,6 +142,32 @@ def get_verts(dims, supp_point_func, epsilon=1e-7):
 
     return rv
 
+def get_verts_gpu(dims, gpu_supp_point_func, epsilon=1e-7):
+    init_simplex = _find_init_simplex(dims, supp_point_func)
+
+    pts, _ = _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_supp_point_func, epsilon=epsilon)
+
+    if dims == 2:
+        # make sure verts are in order (for 2-d plotting)
+        rv = []
+
+        hull = ConvexHull(pts)
+
+        #rv = hull.points
+        max_y = -np.inf
+        for v in hull.vertices:
+            max_y = max(max_y, hull.points[v, 1])
+            
+            rv.append(hull.points[v])
+
+        rv.append(rv[0])
+
+    else:
+        rv = pts
+
+    return rv
+
+
 def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
     '''get all the vertices and hyperplanes of (an epsilon approximation of) the set, defined through supp_point_func
 
@@ -166,6 +193,7 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
 
         hull = ConvexHull(verts)
 
+        store = []
         for i, simplex in enumerate(hull.simplices):
             is_new = False
 
@@ -180,6 +208,9 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             # get hyperplane for simplex
             normal = hull.equations[i, :-1]
             rhs = -1 * hull.equations[i, -1]
+            store.append((normal, rhs))
+
+            #COMPUTE NORMAL FOR ALL equations
 
             supporting_pt = supp_point_func(normal)
             
@@ -191,6 +222,43 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             if error >= epsilon:
                 # add the point... at this point points may be added twice... this doesn't seem to matter
                 new_pts.append(supporting_pt)
+
+    #points[hull.vertices]
+
+    return np.array(verts, dtype=float), hull.equations
+
+def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7, gpu_func):
+        
+    verts = init_simplex
+    #create verts gpu array and copy to gpu
+
+    iteration = 0
+    first_new_index = 0
+
+    while len(verts) > first_new_index:
+        iteration += 1
+        #print(f"\nIteration {iteration}. Verts: {len(verts)}, new_pts: {len(new_pts)}, max_error: {max_error}")
+                
+        first_new_index = len(verts)
+        #copy verts from gpu
+        verts = pycuda.from_gpu.get_verts_array
+
+        hull = ConvexHull(verts)
+
+        #copy hull data to gpu asynchronously
+        simplices_gpu
+        equations_gpu
+
+        store = []
+        #spawn block and make device call for each simplex
+        for i, simplex in enumerate(hull.simplices):
+
+
+        #wait for hull data copy to finish
+        pycuda.wait_for_async
+        #call cuda kernel for each stored (new) simplex
+        pycuda.function.call_the_kernel
+
 
     #points[hull.vertices]
 

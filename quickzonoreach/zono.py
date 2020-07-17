@@ -12,6 +12,32 @@ import matplotlib.pyplot as plt
 from quickzonoreach.util import compress_init_box, Freezable, to_discrete_time_mat
 from quickzonoreach import kamenev
 
+
+#TODO surely there's a better way to do this sort of cuda configuration
+import os
+ENABLE_CUDA = None
+VERTS_KERNEL_FX = None
+
+
+def reload_environment():
+    global ENABLE_CUDA
+    ENABLE_CUDA = True if os.environ.get('QZ_ENABLE_CUDA') == "ENABLED" else False
+
+    if ENABLE_CUDA:
+        import pycuda.autoinit
+        from pycuda.compiler import SourceModule
+        import pycuda.gpuarray as gpuarray
+        import skcuda.cublas as cublas
+        from quickzonoreach import kamenev_gpu
+
+        with open("verts_kernel.cu", "r") as kernel_file:
+            kernel_source_string = '\n'.join(kernel_file.readlines())
+            module = SourceModule(kernel_source_string)
+            VERTS_KERNEL_FX = module.get_function("do_simplices")
+
+
+reload_environment()
+
 def get_zonotope_reachset(init_box, a_mat_list, b_mat_list, input_box_list, dt_list, save_list=None, quick=False):
     '''get the discrete-time zonotope reachable set at each time step
 
@@ -163,14 +189,16 @@ class Zonotope(Freezable):
         rv = self.center.copy()
 
         # project vector (a generator) onto row, to check if it's positive or negative
-        res_vec = np.dot(self.mat_t.transpose(), vector) # slow? since we're taking transpose
+        transpose = self.mat_t.transpose()
+        res_vec = np.dot(transpose, vector) # slow? since we're taking transpose
 
-        for res, row, ib in zip(res_vec, self.mat_t.transpose(), self.init_bounds):
+        for res, row, ib in zip(res_vec, transpose, self.init_bounds):
             factor = ib[1] if res >= 0 else ib[0]
 
             rv += factor * row
 
         return rv
+
 
     def box_bounds(self):
         '''return box bounds of the zonotope. 
@@ -207,19 +235,49 @@ class Zonotope(Freezable):
         assert 0 <= xdim < dims, f"xdim was {xdim}, but num zonotope dims was {dims}"
         assert 0 <= ydim < dims, f"ydim was {ydim}, but num zonotope dims was {dims}"
 
-        def max_func(vec):
-            'projected max func for kamenev'
+        if ENABLE_CUDA:
+            #get python handle for kernel
+            max_func_gpu = max_func_kernel.get_function("max_func")
 
-            max_vec = [0] * dims
-            max_vec[xdim] += vec[0]
-            max_vec[ydim] += vec[1]
-            max_vec = np.array(max_vec, dtype=float)
+            #bind member variable locations to function call
+            center_np = np.array(self.center).astype(np.float64)
+            center_GPU = gpuarray.to_gpu(center_np)
+            dims_np = np.float64(len(self.center))
+            dims_GPU = gpuarray.to_gpu(dims_np)
+            mat_tp_np = np.array(self.mat_t.transpose()).astype(np.float64)
+            mat_tp_GPU = gpuarray.to_gpu(mat_tp_np)
+            mat_tp_dims_np = np.array(mat_tp_np.shape).astype(np.int)
+            mat_tp_dims_GPU = gpuarray.to_gpu(mat_tp_dims_np)
 
-            res = self.maximize(max_vec)
+            init_bounds_np = np.array(self.init_bounds).astype(np.float64)
+            init_bounds_GPU = gpuarray.to_gpu(init_bounds_np)
 
-            return np.array([res[xdim], res[ydim]], dtype=float)
+            init_bounds_dims_np = np.array(self.init_bounds.shape).astype(np.int)
+            init_bounds_dims_GPU = gpuarray.to_gpu(init_bounds_dims_GPU)
 
-        return kamenev.get_verts(2, max_func, epsilon=epsilon)
+            gpu_static_data = (
+                center_GPU, dims_GPU, 
+                mat_tp_GPU, mat_tp_dims_GPU, 
+                init_bounds_GPU, init_bounds_dims_GPU
+            )
+
+            #we will be passing these static class variables regardless
+            gpu_func = partial(VERTS_KERNEL_FX, *gpu_static_data)
+
+            return kamenev.get_verts_gpu(2, gpu_func, epsilon=epsilon)
+        else:
+            def max_func(vec):
+                'projected max func for kamenev'
+
+                max_vec = [0] * dims
+                max_vec[xdim] += vec[0]
+                max_vec[ydim] += vec[1]
+                max_vec = np.array(max_vec, dtype=float)
+
+                res = self.maximize(max_vec)
+
+                return np.array([res[xdim], res[ydim]], dtype=float)
+            return kamenev.get_verts(2, max_func, epsilon=epsilon)
 
     def plot(self, col='k-o', lw=1, xdim=0, ydim=1, label=None, epsilon=1e-7):
         'plot this zonotope'
