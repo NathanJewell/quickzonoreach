@@ -47,7 +47,7 @@ __device__ void max_func(center, mat_t, vector, epsilon) {
                 //return np.array([res[xdim], res[ydim]], dtype=float)
 
 //max of #simplices new verts
-__global__ void _v_h_rep_given_hull(
+__global__ void find_supp_point(
     float *center, int dims,
     float *mat_tp, int *mat_tp_dims, //zonotope member variables
     float *init_bounds, int *init_bounds_dims,
@@ -60,9 +60,14 @@ __global__ void _v_h_rep_given_hull(
 
     //block id determines which simplex is being looked at
     bool is_new = is_geq(simplices[threadId.x], first_new_vert);
-    normal = simplices[threadId.x];
-    rhs = simplices[threadId.x][num_simplices[threadId.x]-1];
-    supp_pt = max_func(equations[threadId.x], num_simplices[threadId.x]-1, center, mat_t);
+
+    if (!is_new) {
+        return;
+    }
+
+    normal = equations[threadId.x];
+    rhs = equations[threadId.x][num_equations[threadId.x]-1];
+    supp_pt = max_func(normal, center, mat_t);
 
     error = dot(supp_pt, normal) - rhs;
 

@@ -76,10 +76,16 @@ class GPU_RUNNER(Thread):
 
 class GPU_Hybrid_ZP(ZonoProcessor):
     def __init__(self, zp_type):
+        import multiprocessing
         from multiprocessing.pool import ThreadPool #this is intended to speed up single-core execution so we use threads vs processes
         super(GPU_Hybrid_ZP, self).__init__(zp_type)
         self.concurrency = 4
         self.process_pool = ThreadPool(self.concurrency)
+        try:
+            multiprocessing.set_start_method("spawn")
+            print("Threads now spawn not fork.")
+        except RuntimeError:
+            pass
         os.environ["QZ_ENABLE_CUDA"] = "ENABLED" #force cuda enable for QZ
         reload_environment()
         #concurrent.futures is SIGNIFICANTLY slower (even slower than single core)
@@ -88,7 +94,8 @@ class GPU_Hybrid_ZP(ZonoProcessor):
     def setup(self):
         pass
     def verts(self, zonos):
-        return list(self.process_pool.map(Zonotope.verts, zonos)) #spawn process for each
+        return [z.verts() for z in zonos]
+        #return list(self.process_pool.map(Zonotope.verts, zonos)) #spawn process for each
 
 class GPU_ZP(ZonoProcessor):
     def setup(self):

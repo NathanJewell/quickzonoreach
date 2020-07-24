@@ -142,10 +142,10 @@ def get_verts(dims, supp_point_func, epsilon=1e-7):
 
     return rv
 
-def get_verts_gpu(dims, gpu_supp_point_func, epsilon=1e-7):
+def get_verts_gpu(dims, supp_point_func, gpu_func, epsilon=1e-7):
     init_simplex = _find_init_simplex(dims, supp_point_func)
 
-    pts, _ = _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_supp_point_func, epsilon=epsilon)
+    pts, _ = _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=epsilon)
 
     if dims == 2:
         # make sure verts are in order (for 2-d plotting)
@@ -208,6 +208,8 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             # get hyperplane for simplex
             normal = hull.equations[i, :-1]
             rhs = -1 * hull.equations[i, -1]
+            import pdb
+            pdb.set_trace()
             store.append((normal, rhs))
 
             #COMPUTE NORMAL FOR ALL equations
@@ -227,9 +229,11 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
 
     return np.array(verts, dtype=float), hull.equations
 
-def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7, gpu_func):
+def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
+    from pycuda import gpuarray
         
-    verts = init_simplex
+    verts = np.asarray(init_simplex).astype(np.float64)
+    verts_GPU = gpuarray.to_gpu(verts)
     #create verts gpu array and copy to gpu
 
     iteration = 0
@@ -241,23 +245,33 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7, gpu_fu
                 
         first_new_index = len(verts)
         #copy verts from gpu
-        verts = pycuda.from_gpu.get_verts_array
+        verts = verts_GPU.get()
 
         hull = ConvexHull(verts)
 
+        import pdb
+        pdb.set_trace()
         #copy hull data to gpu asynchronously
-        simplices_gpu
-        equations_gpu
+        #dims may not be needed since they are implied by grid dims
+        simplices_GPU = gpuarray.to_gpu(hull.simplices)
+        #simplices_dims_GPU = gpuarray.to_gpu(hull.simplices.shape)
+        equations_GPU = gpuarray.to_gpu(hull.equations.astype(np.float64))
+        #equations_dims_GPU = gpuarray.to_gpu(hull.equations.shape)
 
-        store = []
         #spawn block and make device call for each simplex
-        for i, simplex in enumerate(hull.simplices):
+        grid_dims = (len(hull.simplices), 1, 1)
+        block_dims = ((10, 1, 1))
 
+        #call cuda kernel for each stored (new) simplex
+        gpu_func(
+            verts_GPU, np.dtype('int32').type(len(verts)), 
+            simplices_GPU, equations_GPU, 
+            np.dtype('float64').type(epsilon),
+            block=block_dims, grid=grid_dims
+        )
 
         #wait for hull data copy to finish
-        pycuda.wait_for_async
-        #call cuda kernel for each stored (new) simplex
-        pycuda.function.call_the_kernel
+        #pycuda.wait_for_async
 
 
     #points[hull.vertices]
