@@ -22,11 +22,12 @@ VERTS_KERNEL_FX = None
 
 
 ENABLE_CUDA = True if os.environ.get('QZ_ENABLE_CUDA') == "ENABLED" else False
+ENABLE_CUDA = True
 print(ENABLE_CUDA)
 
 if ENABLE_CUDA:
     import pycuda.autoinit
-    from pycuda.compiler import SourceModule
+    from pycuda.compiler import DynamicSourceModule
     import pycuda.gpuarray as gpuarray
     import skcuda.cublas as cublas
     from quickzonoreach import kamenev_gpu
@@ -37,7 +38,7 @@ if ENABLE_CUDA:
     kernel_func_name = "find_supp_point"
     with open(kernel_filepath, "r") as kernel_file:
         kernel_source_string = '\n'.join(kernel_file.readlines())
-        module = SourceModule(kernel_source_string)
+        module = DynamicSourceModule(kernel_source_string, options=['-g'])
         VERTS_KERNEL_FX = module.get_function(kernel_func_name)
         
     def VERTS_KERNEL_FX_TMP(
@@ -269,19 +270,19 @@ class Zonotope(Freezable):
         if ENABLE_CUDA:
 
             #bind member variable locations to function call
-            center_np = np.array(self.center).astype(np.float64)
+            center_np = np.array(self.center).astype(np.float32)
             center_GPU = gpuarray.to_gpu(center_np)
             dims_np = np.float64(len(self.center))
             #dims_GPU = gpuarray.to_gpu(dims_np)
-            mat_tp_np = np.array(self.mat_t.transpose()).astype(np.float64)
+            mat_tp_np = np.array(self.mat_t.transpose()).astype(np.float32)
             mat_tp_GPU = gpuarray.to_gpu(mat_tp_np)
-            mat_tp_dims_np = np.array(mat_tp_np.shape).astype(np.int)
+            mat_tp_dims_np = np.array(mat_tp_np.shape).astype(np.int32)
             mat_tp_dims_GPU = gpuarray.to_gpu(mat_tp_dims_np)
 
-            init_bounds_np = np.array(self.init_bounds).astype(np.float64)
+            init_bounds_np = np.array(self.init_bounds).astype(np.float32)
             init_bounds_GPU = gpuarray.to_gpu(init_bounds_np)
 
-            init_bounds_dims_np = np.array(init_bounds_np.shape).astype(np.int)
+            init_bounds_dims_np = np.array(init_bounds_np.shape).astype(np.int32)
             init_bounds_dims_GPU = gpuarray.to_gpu(init_bounds_dims_np)
 
 

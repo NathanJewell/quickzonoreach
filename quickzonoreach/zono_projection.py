@@ -55,6 +55,8 @@ class CPU_MP_ZP(ZonoProcessor):
     def __init__(self, zp_type):
         from multiprocessing import Pool
         super(CPU_MP_ZP, self).__init__(zp_type)
+        os.environ["QZ_ENABLE_CUDA"] = "DISABLED" #force cuda enable for QZ
+        reload_environment()
         self.concurrency = 4
         self.process_pool = Pool(self.concurrency)
 

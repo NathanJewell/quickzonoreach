@@ -208,12 +208,12 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             # get hyperplane for simplex
             normal = hull.equations[i, :-1]
             rhs = -1 * hull.equations[i, -1]
-            import pdb
-            pdb.set_trace()
             store.append((normal, rhs))
 
             #COMPUTE NORMAL FOR ALL equations
 
+            import pdb
+            pdb.set_trace()
             supporting_pt = supp_point_func(normal)
             
             error = np.dot(supporting_pt, normal) - rhs
@@ -231,13 +231,24 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
 
 def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
     from pycuda import gpuarray
+    import pycuda.driver as cuda
         
-    verts = np.asarray(init_simplex).astype(np.float64)
+    verts = np.asarray(init_simplex).astype(np.float32)
+    #create array with space for n more amount of verts
+
     verts_GPU = gpuarray.to_gpu(verts)
     #create verts gpu array and copy to gpu
 
     iteration = 0
     first_new_index = 0
+    new_verts = None
+
+    max_array_size = 100
+    new_verts_empty = np.zeros((max_array_size, verts.shape[1]), dtype=np.float32)
+    new_verts = new_verts_empty
+    new_verts_GPU = cuda.mem_alloc(new_verts_empty.nbytes)
+    simplices_GPU = cuda.mem_alloc(max_array_size * np.dtype(np.int32).itemsize)
+    equations_GPU = cuda.mem_alloc(max_array_size * np.dtype(np.float32).itemsize)
 
     while len(verts) > first_new_index:
         iteration += 1
@@ -245,35 +256,50 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
                 
         first_new_index = len(verts)
         #copy verts from gpu
-        verts = verts_GPU.get()
 
         hull = ConvexHull(verts)
 
-        import pdb
-        pdb.set_trace()
+
+        if len(hull.simplices) > max_array_size:
+            raise RuntimeError #"CRITICAL ERROR, max_gpu_array_size is overrun"
+
+        #copy empty data to vertices array
+        cuda.memcpy_htod(new_verts_GPU, new_verts)
+
         #copy hull data to gpu asynchronously
         #dims may not be needed since they are implied by grid dims
-        simplices_GPU = gpuarray.to_gpu(hull.simplices)
+        cuda.memcpy_htod(simplices_GPU, hull.simplices)
         #simplices_dims_GPU = gpuarray.to_gpu(hull.simplices.shape)
-        equations_GPU = gpuarray.to_gpu(hull.equations.astype(np.float64))
+        cuda.memcpy_htod(equations_GPU, hull.equations.astype(np.float32))
         #equations_dims_GPU = gpuarray.to_gpu(hull.equations.shape)
+
 
         #spawn block and make device call for each simplex
         grid_dims = (len(hull.simplices), 1, 1)
-        block_dims = ((10, 1, 1))
+        block_dims = ((10, 10, 1))
 
-        #call cuda kernel for each stored (new) simplex
+        #call cuda kernel for each stored (new) simplex IN: <simplices, first new index> OUT: <is_new_indices> 
+        #find supporting points IN: <equations, center, transpose> OUT: <all verts supp pts>
+        #product and add to find error <supp_point, jk
+        print("CALLED KERNEL")
         gpu_func(
-            verts_GPU, np.dtype('int32').type(len(verts)), 
+            new_verts_GPU, 
             simplices_GPU, equations_GPU, 
-            np.dtype('float64').type(epsilon),
+            np.dtype('float32').type(epsilon),
+            np.dtype('int32').type(first_new_index),
             block=block_dims, grid=grid_dims
         )
 
         #wait for hull data copy to finish
         #pycuda.wait_for_async
+        cuda.memcpy_dtoh(new_verts, new_verts_GPU)
+        new_verts = new_verts[~np.all(new_verts == 0, axis=1)] 
+        verts = np.concatenate((verts, new_verts), axis=0) 
 
 
     #points[hull.vertices]
+    new_verts_GPU.free()
+    simplices_GPU.free()
+    equations_GPU.free()
 
     return np.array(verts, dtype=float), hull.equations
