@@ -205,6 +205,8 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             if not is_new:
                 continue # skip this simplex
 
+            import pdb
+            pdb.set_trace()
             # get hyperplane for simplex
             normal = hull.equations[i, :-1]
             rhs = -1 * hull.equations[i, -1]
@@ -212,8 +214,8 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
 
             #COMPUTE NORMAL FOR ALL equations
 
-            import pdb
-            pdb.set_trace()
+            #import pdb
+            #pdb.set_trace()
             supporting_pt = supp_point_func(normal)
             
             error = np.dot(supporting_pt, normal) - rhs
@@ -281,7 +283,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
         #call cuda kernel for each stored (new) simplex IN: <simplices, first new index> OUT: <is_new_indices> 
         #find supporting points IN: <equations, center, transpose> OUT: <all verts supp pts>
         #product and add to find error <supp_point, jk
-        print("CALLED KERNEL")
+        #print("CALLED KERNEL")
         gpu_func(
             new_verts_GPU, 
             simplices_GPU, equations_GPU, 

@@ -22,10 +22,11 @@ VERTS_KERNEL_FX = None
 
 
 ENABLE_CUDA = True if os.environ.get('QZ_ENABLE_CUDA') == "ENABLED" else False
-ENABLE_CUDA = True
+ENABLE_CUDA_LOAD = True
 print(ENABLE_CUDA)
 
-if ENABLE_CUDA:
+
+if ENABLE_CUDA or ENABLE_CUDA_LOAD:
     import pycuda.autoinit
     from pycuda.compiler import DynamicSourceModule
     import pycuda.gpuarray as gpuarray
@@ -246,6 +247,16 @@ class Zonotope(Freezable):
         rv[:, 1] = self.center + pos_pos + neg_neg
         
         return rv
+
+    def verts_gpu(self, xdim=0, ydim=1, epsilon=1e-7):
+        global ENABLE_CUDA
+        ENABLE_CUDA = True
+        return self.verts(xdim, ydim, epsilon)
+
+    def verts_cpu(self, xdim=0, ydim=1, epsilon=1e-7):
+        global ENABLE_CUDA
+        ENABLE_CUDA = False
+        return self.verts(xdim, ydim, epsilon)
 
     def verts(self, xdim=0, ydim=1, epsilon=1e-7):
         'get verts'
