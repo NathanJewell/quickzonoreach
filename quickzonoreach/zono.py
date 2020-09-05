@@ -22,7 +22,7 @@ VERTS_KERNEL_FX = None
 
 
 ENABLE_CUDA = True if os.environ.get('QZ_ENABLE_CUDA') == "ENABLED" else False
-ENABLE_CUDA_LOAD = True
+ENABLE_CUDA_LOAD = False
 print(ENABLE_CUDA)
 
 
