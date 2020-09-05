@@ -170,13 +170,13 @@ __global__ void find_supp_point(
 
     output_dims = {res_vec_, }
 
-    matmul(res_vec, &normal[0], output_dims)
-    matadd_scalar(res_vec, -1 * rhs, output_dims); //operated in-place on input vector
+    matmul(rv_list[0], &normal[0], res_vec, output_dims)
+    matadd_scalar(res_vec, -1 * rhs, res_vec, output_dims); //operated in-place on input vector
 
     //add the point if it is in the face
-    if (*error >= epsilon) {
-        new_verts[row] = rv[xdim]
-        new_verts[row+1] = rv[ydim]
+    if (*res_vec[0] >= epsilon) {
+        new_verts[row] = rv_list[xdim];
+        new_verts[row+1] = rv_list[ydim];
     }
 
     free(max_vec);
