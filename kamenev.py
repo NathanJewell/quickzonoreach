@@ -205,8 +205,8 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             if not is_new:
                 continue # skip this simplex
 
-            import pdb
-            pdb.set_trace()
+            #import pdb
+            #pdb.set_trace()
             # get hyperplane for simplex
             normal = hull.equations[i, :-1]
             rhs = -1 * hull.equations[i, -1]
@@ -238,9 +238,6 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
     verts = np.asarray(init_simplex).astype(np.float32)
     #create array with space for n more amount of verts
 
-    verts_GPU = gpuarray.to_gpu(verts)
-    #create verts gpu array and copy to gpu
-
     iteration = 0
     first_new_index = 0
     new_verts = None
@@ -250,7 +247,9 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
     new_verts = new_verts_empty
     new_verts_GPU = cuda.mem_alloc(new_verts_empty.nbytes)
     simplices_GPU = cuda.mem_alloc(max_array_size * np.dtype(np.int32).itemsize)
+    simplices_dims_GPU = cuda.mem_alloc(2 * np.dtype(np.int32).itemsize)
     equations_GPU = cuda.mem_alloc(max_array_size * np.dtype(np.float32).itemsize)
+    equations_dims_GPU = cuda.mem_alloc(2 * np.dtype(np.int32).itemsize)
 
     while len(verts) > first_new_index:
         iteration += 1
@@ -269,11 +268,10 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
         cuda.memcpy_htod(new_verts_GPU, new_verts)
 
         #copy hull data to gpu asynchronously
-        #dims may not be needed since they are implied by grid dims
         cuda.memcpy_htod(simplices_GPU, hull.simplices)
-        #simplices_dims_GPU = gpuarray.to_gpu(hull.simplices.shape)
+        cuda.memcpy_htod(simplices_dims_GPU, np.asarray(hull.simplices.shape).astype(np.int32))
         cuda.memcpy_htod(equations_GPU, hull.equations.astype(np.float32))
-        #equations_dims_GPU = gpuarray.to_gpu(hull.equations.shape)
+        cuda.memcpy_htod(equations_dims_GPU, np.asarray(hull.equations.shape).astype(np.int32))
 
 
         #spawn block and make device call for each simplex
@@ -286,7 +284,8 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
         #print("CALLED KERNEL")
         gpu_func(
             new_verts_GPU, 
-            simplices_GPU, equations_GPU, 
+            simplices_GPU, simplices_dims_GPU,
+            equations_GPU, equations_dims_GPU,
             np.dtype('float32').type(epsilon),
             np.dtype('int32').type(first_new_index),
             block=block_dims, grid=grid_dims

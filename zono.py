@@ -22,7 +22,7 @@ VERTS_KERNEL_FX = None
 
 
 ENABLE_CUDA = True if os.environ.get('QZ_ENABLE_CUDA') == "ENABLED" else False
-ENABLE_CUDA_LOAD = False
+ENABLE_CUDA_LOAD = True
 print(ENABLE_CUDA)
 
 
@@ -34,7 +34,7 @@ if ENABLE_CUDA or ENABLE_CUDA_LOAD:
     from quickzonoreach import kamenev_gpu
 
     here = os.path.dirname(os.path.abspath(__file__))
-    kernel_filename = "verts_test.cu" 
+    kernel_filename = "verts_dummy.cu" 
     kernel_filepath = os.path.join(here, kernel_filename)
     kernel_func_name = "find_supp_point"
     with open(kernel_filepath, "r") as kernel_file:
