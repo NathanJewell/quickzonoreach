@@ -268,7 +268,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
         cuda.memcpy_htod(new_verts_GPU, new_verts)
 
         #copy hull data to gpu asynchronously
-        cuda.memcpy_htod(simplices_GPU, hull.simplices)
+        cuda.memcpy_htod(simplices_GPU, hull.simplices.astype(np.float32))
         cuda.memcpy_htod(simplices_dims_GPU, np.asarray(hull.simplices.shape).astype(np.int32))
         cuda.memcpy_htod(equations_GPU, hull.equations.astype(np.float32))
         cuda.memcpy_htod(equations_dims_GPU, np.asarray(hull.equations.shape).astype(np.int32))
@@ -283,6 +283,9 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
         #product and add to find error <supp_point, jk
         #print("CALLED KERNEL")
         gpu_func(
+            #center_GPU, np.dtype('int32').type(len(center)),
+            #mat_tp_GPU, mat_tp_dims_GPU,
+            #init_bounds_GPU, init_bounds_dims_GPU,
             new_verts_GPU, 
             simplices_GPU, simplices_dims_GPU,
             equations_GPU, equations_dims_GPU,
@@ -301,6 +304,8 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
     #points[hull.vertices]
     new_verts_GPU.free()
     simplices_GPU.free()
+    simplices_dims_GPU.free()
     equations_GPU.free()
+    equations_dims_GPU.free()
 
     return np.array(verts, dtype=float), hull.equations

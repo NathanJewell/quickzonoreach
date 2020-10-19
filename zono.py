@@ -29,8 +29,7 @@ print(ENABLE_CUDA)
 if ENABLE_CUDA or ENABLE_CUDA_LOAD:
     import pycuda.autoinit
     from pycuda.compiler import DynamicSourceModule
-    import pycuda.gpuarray as gpuarray
-    import skcuda.cublas as cublas
+    import pycuda.driver as cuda
     from quickzonoreach import kamenev_gpu
 
     here = os.path.dirname(os.path.abspath(__file__))
@@ -282,19 +281,26 @@ class Zonotope(Freezable):
 
             #bind member variable locations to function call
             center_np = np.array(self.center).astype(np.float32)
-            center_GPU = gpuarray.to_gpu(center_np)
-            dims_np = np.float64(len(self.center))
-            #dims_GPU = gpuarray.to_gpu(dims_np)
+            center_GPU = cuda.mem_alloc(center_np.nbytes)
+            cuda.memcpy_htod(center_GPU, center_np)
+
+            dims_np = np.dtype('int32').type(len(self.center))
+
             mat_tp_np = np.array(self.mat_t.transpose()).astype(np.float32)
-            mat_tp_GPU = gpuarray.to_gpu(mat_tp_np)
+            mat_tp_GPU = cuda.mem_alloc(mat_tp_np.nbytes)
+            cuda.memcpy_htod(mat_tp_GPU, mat_tp_np)
+
             mat_tp_dims_np = np.array(mat_tp_np.shape).astype(np.int32)
-            mat_tp_dims_GPU = gpuarray.to_gpu(mat_tp_dims_np)
+            mat_tp_dims_GPU = cuda.mem_alloc(mat_tp_dims_np.nbytes)
+            cuda.memcpy_htod(mat_tp_dims_GPU, mat_tp_dims_np)
 
             init_bounds_np = np.array(self.init_bounds).astype(np.float32)
-            init_bounds_GPU = gpuarray.to_gpu(init_bounds_np)
+            init_bounds_GPU = cuda.mem_alloc(init_bounds_np.nbytes)
+            cuda.memcpy_htod(init_bounds_GPU, init_bounds_np)
 
             init_bounds_dims_np = np.array(init_bounds_np.shape).astype(np.int32)
-            init_bounds_dims_GPU = gpuarray.to_gpu(init_bounds_dims_np)
+            init_bounds_dims_GPU = cuda.mem_alloc(init_bounds_dims_np.nbytes)
+            cuda.memcpy_htod(init_bounds_dims_GPU, init_bounds_dims_np)
 
 
             gpu_static_data = (
@@ -306,7 +312,15 @@ class Zonotope(Freezable):
             #we will be passing these static class variables regardless
             gpu_func = partial(VERTS_KERNEL_FX, *gpu_static_data)
 
-            return kamenev.get_verts_gpu(2, max_func, gpu_func, epsilon=epsilon)
+            verts = kamenev.get_verts_gpu(2, max_func, gpu_func, epsilon=epsilon)
+
+            center_GPU.free()
+            mat_tp_GPU.free()
+            mat_tp_dims_GPU.free()
+            init_bounds_GPU.free()
+            init_bounds_dims_GPU.free()
+
+            return verts
         else:
             return kamenev.get_verts(2, max_func, epsilon=epsilon)
 
