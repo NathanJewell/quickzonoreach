@@ -7,8 +7,9 @@ import time
 class ZP_TYPE(Enum):
     CPU = 0        #standard cpu-only computation
     CPU_MP = 1      #multiprocessing enabled cpu-only computation
-    GPU_Hybrid = 2  #mixed gpu/cpu implementation
-    GPU = 3         #maximimally gpu oriented implementation
+    GPU_DUMMY = 2
+    GPU_HYBRID= 3  #mixed gpu/cpu implementation
+    GPU = 4         #maximimally gpu oriented implementation
 
 
 
@@ -24,8 +25,9 @@ def get_ZP_instance(zp_type):
     proc_type_class = {
         ZP_TYPE.CPU : CPU_ZP,
         ZP_TYPE.CPU_MP : CPU_MP_ZP,
+        ZP_TYPE.GPU_DUMMY : GPU_DUMMY_ZP,
+        ZP_TYPE.GPU_HYBRID: GPU_HYBRID_ZP
         ZP_TYPE.GPU : GPU_ZP,
-        ZP_TYPE.GPU_Hybrid : GPU_Hybrid_ZP
     }
     if not zp_type in instance_dict:
         instance_dict[zp_type] = proc_type_class[zp_type](zp_type)
@@ -77,10 +79,15 @@ class CPU_MP_ZP(ZonoProcessor):
         return list(self.process_pool.map(Zonotope.verts_cpu, zonos))
 
 
+class GPU_DUMMY_ZP(ZonoProcessor):
+    def setup(self):
+        pass
+    def verts(self, zonos):
+        pass
 
-class GPU_Hybrid_ZP(ZonoProcessor):
+class GPU_HYBRID_ZP(ZonoProcessor):
     def __init__(self, zp_type):
-        super(GPU_Hybrid_ZP, self).__init__(zp_type)
+        super(GPU_HYBRID_ZP, self).__init__(zp_type)
         #try:
             #multiprocessing.set_start_method("spawn")
             #print("Threads now spawn not fork.")
@@ -97,10 +104,7 @@ class GPU_Hybrid_ZP(ZonoProcessor):
         return [z.verts_gpu() for z in zonos]
 
 class GPU_ZP(ZonoProcessor):
-    def setup(self):
-        pass
-    def verts(self, zonos):
-        pass
+    raise NotImplementedError("ZP not implemented")
 
 
     
