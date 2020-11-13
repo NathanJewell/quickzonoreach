@@ -26,7 +26,7 @@ def get_ZP_instance(zp_type):
         ZP_TYPE.CPU : CPU_ZP,
         ZP_TYPE.CPU_MP : CPU_MP_ZP,
         ZP_TYPE.GPU_DUMMY : GPU_DUMMY_ZP,
-        ZP_TYPE.GPU_HYBRID: GPU_HYBRID_ZP
+        ZP_TYPE.GPU_HYBRID: GPU_HYBRID_ZP,
         ZP_TYPE.GPU : GPU_ZP,
     }
     if not zp_type in instance_dict:
@@ -80,10 +80,15 @@ class CPU_MP_ZP(ZonoProcessor):
 
 
 class GPU_DUMMY_ZP(ZonoProcessor):
+    def __init__(self, zp_type):
+        super(GPU_DUMMY_ZP, self).__init__(zp_type)
+        os.environ["QZ_ENABLE_CUDA"] = "ENABLED" #force cuda enable for QZ
+        reload_environment(dummy=True)
+
     def setup(self):
         pass
     def verts(self, zonos):
-        pass
+        return [z.verts_gpu() for z in zonos]
 
 class GPU_HYBRID_ZP(ZonoProcessor):
     def __init__(self, zp_type):
@@ -104,7 +109,8 @@ class GPU_HYBRID_ZP(ZonoProcessor):
         return [z.verts_gpu() for z in zonos]
 
 class GPU_ZP(ZonoProcessor):
-    raise NotImplementedError("ZP not implemented")
+    pass
+    #raise NotImplementedError("ZP not implemented")
 
 
     

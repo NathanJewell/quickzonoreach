@@ -296,6 +296,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
 
         #wait for hull data copy to finish
         #pycuda.wait_for_async
+        cuda.Context.synchronize()
         cuda.memcpy_dtoh(new_verts, new_verts_GPU)
         new_verts = new_verts[~np.all(new_verts == 0, axis=1)] 
         verts = np.concatenate((verts, new_verts), axis=0) 

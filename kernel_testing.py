@@ -1,18 +1,18 @@
 
 import pycuda.autoinit
-from pycuda.compiler import DynamicSourceModule
+from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 import pycuda.driver as cuda
 import skcuda.cublas as cublas
 import os
 
 here = os.path.dirname(os.path.abspath(__file__))
-here = "/home/dev/cuda-venv/src/quickzonoreach/"
+here = "/home/nvidia/f1racing/quickzonoreach/quickzonoreach/"
 kernel_filename = "verts_test.cu" 
 kernel_filepath = os.path.join(here, kernel_filename)
 with open(kernel_filepath, "r") as kernel_file:
     kernel_source_string = '\n'.join(kernel_file.readlines())
-    module = DynamicSourceModule(kernel_source_string, options=['-g'])
+    module = SourceModule(kernel_source_string, options=['-g'])
     
     matmul_gpu = module.get_function("matmul_global")
     matvec_gpu = module.get_function("matvec_global")

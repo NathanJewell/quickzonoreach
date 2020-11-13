@@ -1,111 +1,236 @@
+// AUTHOR: Nathan Jewell
+// July 2020
 
 
-__device__ maximize(rv, mat_tp, init_bounds, rv_arr) {
+//device fx to perform matrix product on single 2d block
+//dims = { A-rows, A-cols, B-rows, B-cols}
+//so the output dimension should be A-rows x B-cols
+__device__ void matmul ( 
+    float *A, float *B, float *C,
+    int* dims
+) {
+    int row = threadIdx.x;
+    int col = threadIdx.y;
 
+    if ( col >= dims[3] || row >= dims[0] ) {
+        //thread is out of bounds - will not execute anything
+        return;
+    }
 
+    float idx_sum = 0;
+    for (int k = 0; k < dims[1]; k++) {
+        idx_sum += A[row*dims[1] + k] * B[k * dims[3] + col];
+    }
+
+    C[row * dims[3] + col] = idx_sum;
 }
 
-    //def maximize(self, vector):
-        //'get the maximum point of the zonotope in the passed-in direction'
-
-        //rv = self.center.copy()
-
-        //# project vector (a generator) onto row, to check if it's positive or negative
-        //transpose = self.mat_t.transpose()
-        //res_vec = np.dot(transpose, vector) # slow? since we're taking transpose
-
-        //for res, row, ib in zip(res_vec, transpose, self.init_bounds):
-            //factor = ib[1] if res >= 0 else ib[0]
-
-            //rv += factor * row
-
-        //return rv
-
-
-__device__ void max_func(center, mat_t, vector, epsilon) {
-    int xdim = 0;
-    int ydim = 1;
-
-    //max_func
-
-    //maximize
-    res_vec = vector * transpose //cublas matmul
-    result = center;
-
-
+__global__ void matmul_global ( 
+    float *A, float *B, float *C,
+    int* dims
+) {
+    matmul(A, B, C, dims);
 }
-            //def max_func(vec):
-                //'projected max func for kamenev'
 
-                //max_vec = [0] * dims
-                //max_vec[xdim] += vec[0]
-                //max_vec[ydim] += vec[1]
-                //max_vec = np.array(max_vec, dtype=float)
+//multiply nd matrix by vector in style of np.dot
+__device__ void matvec (
+    float *A, float *B, float *C, int *dims
+) {
+    int row = threadIdx.x;
 
-                //res = self.maximize(max_vec)
+    if ( row >= dims[0] || threadIdx.y != 0 ) {
+        //thread is out of bounds - will not execute anything
+        return;
+    }
 
-                //return np.array([res[xdim], res[ydim]], dtype=float)
+    float idx_sum = 0;
+    for (int k = 0; k < dims[1]; k++) {
+        idx_sum += A[row*dims[1] + k] * B[k];
+    }
+    C[row] = idx_sum;
+}
 
-//max of #simplices new verts
+__global__ void matvec_global (
+    float *A, float *B, float *C, int *dims
+) {
+    matvec(A, B, C, dims);
+}
+//device fx to perform matrix scalar multiplaction on single 2d thread block
+//dims = {A rows, A cols}
+__device__ void matadd_scalar (
+    float *A, float B, float * C, int * dims
+) {
+
+    int row = threadIdx.x;
+    int col = threadIdx.y;
+    if ( row >= dims[0] || col >= dims[1] ) {
+        //thread is out of bounds - will not execute anything
+        return;
+    }
+
+    C[row * dims[1] + col] = A[row * dims[1] + col] + B;
+}
+
+__global__ void matadd_scalar_global (
+    float *A, float B, float * C, int * dims
+) {
+    matadd_scalar(A, B, C, dims);
+}
+
+__device__ void matmul_scalar (
+    float *A, float B, float *C, int * dims
+) {
+    int row = threadIdx.x;
+    int col = threadIdx.y;
+    if ( row >= dims[0] || col >= dims[1] ) {
+        //thread is out of bounds - will not execute anything
+        return;
+    }
+
+    C[row * dims[1] + col] = A[row * dims[1] + col] * B;
+}
+
+__global__ void matmul_scalar_global (
+    float *A, float B, float *C, int * dims
+) {
+    matmul_scalar(A, B, C, dims);
+}
+
+//A and B must have same dims
+__device__ void sum_vec_inplace(float *A, float *B, int vec_size) {
+    int col = threadIdx.y;
+    if (col < vec_size) {
+        A[col] = A[col] + B[col];
+    }
+}
+
+__global__ void sum_vec_inplace_global(float * A, float *B, int vec_size) {
+    sum_vec_inplace(A, B, vec_size);
+}
+
+//simple distributed vector list sum
+__device__ void sum_vec_list (
+    float *A, int spacing, int length, int vec_size
+) {
+    if (threadIdx.x >= int(length / spacing)) return; //threadIdx.x represents location within list
+    if (threadIdx.y >= vec_size) return; //threadIdx.y represents location within vector
+    int node = threadIdx.x * spacing * vec_size + threadIdx.y;
+    int other = node + spacing * vec_size;
+    if (other >= length) return; //A[node] = A[node]
+    sum_vec_inplace(&A[node], &A[node + spacing * vec_size], vec_size);
+    //A[node] = A[node] + A[node + spacing * vec_size];
+}
+
+__global__ void sum_vec_list_global (
+    float *A, int spacing, int length, int vec_size
+) {
+    sum_vec_list(A, spacing, length, vec_size);
+}
+
 __global__ void find_supp_point(
     float *center, int dims,
     float *mat_tp, int *mat_tp_dims, //zonotope member variables
     float *init_bounds, int *init_bounds_dims,
-    float *verts,                         //all verts
-    float *simplices, int *num_simplices, //convex hull simplices
-    float *equations, int *num_equations, //convex hull equations
+    float *new_verts,             //output space for supp points which are new vertices
+    float *simplices, int *simplices_dims, //convex hull simplices
+    float *equations, int *equations_dims, //convex hull equations
     float epsilon, //minimum error
-    float error  //output variables
+    int first_new_index
     ) {
 
     //block id determines which simplex is being looked at
-    bool is_new = is_geq(simplices[threadId.x], first_new_vert);
+    __shared__ float normal[2];
+    __shared__ float rhs;
+    __shared__ float * res_vec;
+    __shared__ float * max_vec; 
+    __shared__ float * rv_list;
+    __shared__ bool is_new;
+    int row = blockIdx.x;
+    int idx = threadIdx.y * gridDim.x + threadIdx.x;
+    int xdim = 0; int ydim = 1;
 
-    if (!is_new) {
-        return;
+    //check if the simplex (per block) is new
+    if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
+        is_new = false; 
+
+        for (int k = 0; k < init_bounds_dims[1]; k++){
+            if (simplices[row + k] >= first_new_index) {
+                is_new = true;
+                break;
+            }
+        }
+
+        if (!is_new) return;
+
+        //setup some block-shared variables
+        int eq_idx = row * simplices_dims[1];
+        float normal[2] = { equations[eq_idx], equations[eq_idx+1]}; //all but last element in row
+        float rhs = -1 * equations[eq_idx + 2]; //-1 * last element in row
+
+        res_vec = (float *)malloc( sizeof(float) * mat_tp_dims[0] * 1 );
+        max_vec = (float *)malloc(dims * sizeof(float));
+        rv_list = (float *)malloc(((mat_tp_dims[0]+1) * mat_tp_dims[1])* sizeof(float));
+        memset(max_vec, 0, dims*sizeof(float));
+        memcpy(res_vec, center, dims * sizeof(float));
+        max_vec[xdim] = normal[0];
+        max_vec[ydim] = normal[1];
+        
     }
 
-    normal = equations[threadId.x];
-    rhs = equations[threadId.x][num_equations[threadId.x]-1];
-    supp_pt = max_func(normal, center, mat_t);
+    //sync threads so we can increase concurrency
+    __syncthreads();
+    if (!is_new) return; //nothing further in this block - allready computed
 
-    error = dot(supp_pt, normal) - rhs;
+    int combined_dims[4] = { mat_tp_dims[0], mat_tp_dims[1], dims, 1};
+    //matvec(mat_tp, max_vec, res_vec, combined_dims);
+    matvec(mat_tp, max_vec, rv_list, combined_dims); //first elem of rv_list is rv
+    //res_vec is matrix of shape (mat_tp_dims[0] x 1)
 
-    if (error >= epsilon) {
-        new_verts[threadId.x] = supp_pt;
+    __syncthreads();
+
+    if (threadIdx.x < mat_tp_dims[0]) {
+        float factor; 
+        if (res_vec[threadIdx.x] >= 0) {
+            factor = init_bounds[threadIdx.x * init_bounds_dims[1] + 1];
+        } else {
+            factor = init_bounds[threadIdx.x * init_bounds_dims[1]];
+        }
+        //1d vector by scalar
+        combined_dims[0] = mat_tp_dims[1]; combined_dims[1] = 1;
+        combined_dims[2] = 1;combined_dims[3] = 1;
+        matmul_scalar(&mat_tp[threadIdx.x * mat_tp_dims[1]], factor, &rv_list[threadIdx.x*mat_tp_dims[1]+1], combined_dims);
+    }
+    //append center to rv_list
+    //sum rv_list into res_vec
+    __syncthreads();
+    int spacing = 2;
+    while ( spacing <= (mat_tp_dims[0]/2)) {
+        sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
+        __syncthreads();
+        spacing = spacing * 2;
     }
 
+    
+    __syncthreads();
+
+    combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
+    combined_dims[2] = normal[0];combined_dims[3] = 1;
+
+    matmul(&rv_list[0], &normal[0], res_vec, combined_dims);
+
+    combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
+    combined_dims[2] = normal[0];combined_dims[3] = 1;
+    matadd_scalar(res_vec, -1 * rhs, res_vec, combined_dims); //operated in-place on input vector
+
+    //add the point if it is in the face
+    if (res_vec[0] >= epsilon) {
+        new_verts[row] = rv_list[xdim];
+        new_verts[row+1] = rv_list[ydim];
+    }
+
+    free(max_vec);
+    free(res_vec);
+    free(rv_list);
     return;
 
 }
-
-
-//CODE TO BE PARALLELIZED
-
-            //is_new = False
-
-            //for index in simplex:
-                //if index >= first_new_index:
-                    //is_new = True
-                    //break
-
-            //if not is_new:
-                //continue # skip this simplex
-
-            //# get hyperplane for simplex
-            //normal = hull.equations[i, :-1]
-            //rhs = -1 * hull.equations[i, -1]
-            //store.append((normal, rhs))
-
-            //#COMPUTE NORMAL FOR ALL equations
-
-            //supporting_pt = supp_point_func(normal)
-            
-            //error = np.dot(supporting_pt, normal) - rhs
-            //max_error = max(max_error, error)
-
-            //assert error >= -1e-7, "supporting point was inside facet?"
-
-            //if error >= epsilon:
-                //# add the point... at this point points may be added twice... this doesn't seem to matter
-                //new_pts.append(supporting_pt)

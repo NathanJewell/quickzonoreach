@@ -4,6 +4,9 @@ quickzonoreach
 zonotope functions
 
 Stanley Bak
+
+Cuda Additions
+Nathan Jewell
 '''
 
 import numpy as np
@@ -20,43 +23,47 @@ import os
 ENABLE_CUDA = None
 VERTS_KERNEL_FX = None
 
+full_kernel_fx = None
+dummy_kernel_fx = None
 
 ENABLE_CUDA = True if os.environ.get('QZ_ENABLE_CUDA') == "ENABLED" else False
 ENABLE_CUDA_LOAD = True
-print(ENABLE_CUDA)
+CUDA_LOADED = False
 
-
-if ENABLE_CUDA or ENABLE_CUDA_LOAD:
+if ENABLE_CUDA_LOAD:
     import pycuda.autoinit
-    from pycuda.compiler import DynamicSourceModule
+    from pycuda.compiler import SourceModule
     import pycuda.driver as cuda
     from quickzonoreach import kamenev_gpu
-
     here = os.path.dirname(os.path.abspath(__file__))
-    kernel_filename = "verts_dummy.cu" 
+    kernel_filename = "verts_kernel.cu"
+    dummy_filename = "verts_dummy.cu" 
     kernel_filepath = os.path.join(here, kernel_filename)
+    dummy_filepath = os.path.join(here, dummy_filename)
     kernel_func_name = "find_supp_point"
     with open(kernel_filepath, "r") as kernel_file:
         kernel_source_string = '\n'.join(kernel_file.readlines())
-        module = DynamicSourceModule(kernel_source_string, options=['-g'])
-        VERTS_KERNEL_FX = module.get_function(kernel_func_name)
-        
-    def VERTS_KERNEL_FX_TMP(
-        center, dims, 
-        mat_tp, mat_dims, 
-        init, init_dims, 
-        verts, 
-        simplices,  
-        equations, epsilon
-    ):
-        print("CALLED VERTS GPU FX")
-    
-    #VERTS_KERNEL_FX = VERTS_KERNEL_FX_TMP
+        module = SourceModule(kernel_source_string, options=['-g'])
+        full_kernel_fx = module.get_function(kernel_func_name)
 
+    with open(dummy_filepath, "r") as kernel_file:
+        kernel_source_string = '\n'.join(kernel_file.readlines())
+        module = SourceModule(kernel_source_string, options=['-g'])
+        dummy_kernel_fx = module.get_function(kernel_func_name)
 
-def reload_environment():
-    pass
-reload_environment()
+    CUDA_LOADED = True
+
+def reload_environment(dummy=False):
+    if not CUDA_LOADED:
+        raise Exception("FATAL: CANNOT Specificy QZ Cuda Env since CUDA is not loaded")
+    global ENABLE_CUDA
+    global VERTS_KERNEL_FX
+    ENABLE_CUDA = True if os.environ.get('QZ_ENABLE_CUDA') == "ENABLED" else False
+    VERTS_KERNEL_FX = full_kernel_fx if not dummy else dummy_kernel_fx
+    print(f"CUDA FX IS dummy: {dummy}")
+
+if ENABLE_CUDA_LOAD:
+    reload_environment()
 
 def get_zonotope_reachset(init_box, a_mat_list, b_mat_list, input_box_list, dt_list, save_list=None, quick=False):
     '''get the discrete-time zonotope reachable set at each time step

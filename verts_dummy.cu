@@ -14,24 +14,24 @@ __global__ void find_supp_point(
     int row = blockIdx.x * 2;
     int xdim = 0; int ydim = 1;
 
-    bool is_new;
-    if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
-        is_new = false; 
+    //bool is_new;
+    //if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
+        //is_new = false; 
 
-        for (int k = 0; k < init_bounds_dims[1]; k++){
-            if (simplices[row + k] >= first_new_index) {
-                is_new = true;
-                break;
-            }
-        }
+        //for (int k = 0; k < init_bounds_dims[1]; k++){
+            //if (simplices[row + k] >= first_new_index) {
+                //is_new = true;
+                //break;
+            //}
+        //}
 
-        if (!is_new) return;
-    }
+        //if (!is_new) return;
+    //}
     //once per block
     if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
         //add the point if it is in the face
-        new_verts[row] = 1;
-        new_verts[row+1] = 1;
+        new_verts[row] = blockIdx.x;
+        new_verts[row+1] = blockIdx.y;
     }
 
     return;
