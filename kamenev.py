@@ -205,8 +205,8 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             if not is_new:
                 continue # skip this simplex
 
-            #import pdb
-            #pdb.set_trace()
+            import pdb
+            pdb.set_trace()
             # get hyperplane for simplex
             normal = hull.equations[i, :-1]
             rhs = -1 * hull.equations[i, -1]
@@ -255,7 +255,6 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
         iteration += 1
         #print(f"\nIteration {iteration}. Verts: {len(verts)}, new_pts: {len(new_pts)}, max_error: {max_error}")
                 
-        first_new_index = len(verts)
         #copy verts from gpu
 
         hull = ConvexHull(verts)
@@ -268,9 +267,9 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
         cuda.memcpy_htod(new_verts_GPU, new_verts)
 
         #copy hull data to gpu asynchronously
-        cuda.memcpy_htod(simplices_GPU, hull.simplices.astype(np.float32))
+        cuda.memcpy_htod(simplices_GPU, hull.simplices.astype(np.float32).flatten())
         cuda.memcpy_htod(simplices_dims_GPU, np.asarray(hull.simplices.shape).astype(np.int32))
-        cuda.memcpy_htod(equations_GPU, hull.equations.astype(np.float32))
+        cuda.memcpy_htod(equations_GPU, hull.equations.astype(np.float32).flatten())
         cuda.memcpy_htod(equations_dims_GPU, np.asarray(hull.equations.shape).astype(np.int32))
 
 
@@ -293,12 +292,13 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
             np.dtype('int32').type(first_new_index),
             block=block_dims, grid=grid_dims
         )
-
+        print("Made call")
         #wait for hull data copy to finish
         #pycuda.wait_for_async
-        cuda.Context.synchronize()
+        #cuda.Context.synchronize()
         cuda.memcpy_dtoh(new_verts, new_verts_GPU)
         new_verts = new_verts[~np.all(new_verts == 0, axis=1)] 
+        first_new_index = len(verts)
         verts = np.concatenate((verts, new_verts), axis=0) 
 
 

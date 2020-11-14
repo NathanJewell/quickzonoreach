@@ -112,12 +112,15 @@ __global__ void sum_vec_inplace_global(float * A, float *B, int vec_size) {
 __device__ void sum_vec_list (
     float *A, int spacing, int length, int vec_size
 ) {
+//vecsize is length of vectors within the list
+//spacing is the number of vectors between result vectors after this operation
+//length is the total number of entries
     if (threadIdx.x >= int(length / spacing)) return; //threadIdx.x represents location within list
     if (threadIdx.y >= vec_size) return; //threadIdx.y represents location within vector
-    int node = threadIdx.x * spacing * vec_size + threadIdx.y;
-    int other = node + spacing * vec_size;
-    if (other >= length) return; //A[node] = A[node]
-    sum_vec_inplace(&A[node], &A[node + spacing * vec_size], vec_size);
+    int node = threadIdx.x * spacing * vec_size + threadIdx.y; //location of this sums result
+    int other = node + (spacing) * vec_size;
+    if (other >= (length * vec_size)) return; //A[node] = A[node]
+    sum_vec_inplace(&A[node], &A[other], vec_size);
     //A[node] = A[node] + A[node + spacing * vec_size];
 }
 
@@ -145,6 +148,7 @@ __global__ void find_supp_point(
     __shared__ float * max_vec; 
     __shared__ float * rv_list;
     __shared__ bool is_new;
+
     int row = blockIdx.x;
     int idx = threadIdx.y * gridDim.x + threadIdx.x;
     int xdim = 0; int ydim = 1;
@@ -153,8 +157,8 @@ __global__ void find_supp_point(
     if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
         is_new = false; 
 
-        for (int k = 0; k < init_bounds_dims[1]; k++){
-            if (simplices[row + k] >= first_new_index) {
+        for (int k = 0; k < simplices_dims[1]; k++){
+            if (simplices[row*simplices_dims[1] + k] >= first_new_index) {
                 is_new = true;
                 break;
             }
@@ -164,8 +168,9 @@ __global__ void find_supp_point(
 
         //setup some block-shared variables
         int eq_idx = row * simplices_dims[1];
-        float normal[2] = { equations[eq_idx], equations[eq_idx+1]}; //all but last element in row
-        float rhs = -1 * equations[eq_idx + 2]; //-1 * last element in row
+        normal[0] = equations[eq_idx];
+        normal[1] = equations[eq_idx+1]; //all but last element in row
+        rhs = -1 * equations[eq_idx + 2]; //-1 * last element in row
 
         res_vec = (float *)malloc( sizeof(float) * mat_tp_dims[0] * 1 );
         max_vec = (float *)malloc(dims * sizeof(float));
@@ -198,25 +203,28 @@ __global__ void find_supp_point(
         //1d vector by scalar
         combined_dims[0] = mat_tp_dims[1]; combined_dims[1] = 1;
         combined_dims[2] = 1;combined_dims[3] = 1;
-        matmul_scalar(&mat_tp[threadIdx.x * mat_tp_dims[1]], factor, &rv_list[threadIdx.x*mat_tp_dims[1]+1], combined_dims);
+        matmul_scalar(&mat_tp[threadIdx.x * mat_tp_dims[1]], factor, &rv_list[(threadIdx.x+1)*mat_tp_dims[1]], combined_dims);
     }
     //append center to rv_list
     //sum rv_list into res_vec
     __syncthreads();
-    int spacing = 2;
-    while ( spacing <= (mat_tp_dims[0]/2)) {
-        sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
-        __syncthreads();
-        spacing = spacing * 2;
+    if (blockIdx.x == 0) {
+        int spacing = 1;
+        while ( spacing <= (mat_tp_dims[1]/2)) {
+            sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
+            spacing = spacing * 2;
+            __threadfence();
+        }
     }
 
-    
     __syncthreads();
 
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
-    combined_dims[2] = normal[0];combined_dims[3] = 1;
+    combined_dims[2] = mat_tp_dims[0] ;combined_dims[3] = 1;
 
     matmul(&rv_list[0], &normal[0], res_vec, combined_dims);
+
+    __syncthreads();
 
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
     combined_dims[2] = normal[0];combined_dims[3] = 1;
@@ -228,9 +236,35 @@ __global__ void find_supp_point(
         new_verts[row+1] = rv_list[ydim];
     }
 
-    free(max_vec);
-    free(res_vec);
-    free(rv_list);
+    //free(max_vec);
+    //free(res_vec);
+    //free(rv_list);
+    return;
+
+}
+
+__global__ void dummy_supp_point(
+    float *center, int dims,
+    float *mat_tp, int *mat_tp_dims, //zonotope member variables
+    float *init_bounds, int *init_bounds_dims,
+    float *new_verts,             //output space for supp points which are new vertices
+    float *simplices, int *simplices_dims, //convex hull simplices
+    float *equations, int *equations_dims, //convex hull equations
+    float epsilon, //minimum error
+    int first_new_index
+    ) {
+
+    //block id determines which simplex is being looked at
+    int row = blockIdx.x * 2;
+    int xdim = 0; int ydim = 1;
+
+    //once per block
+    if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
+        //add the point if it is in the face
+        new_verts[row] = blockIdx.x;
+        new_verts[row+1] = blockIdx.y;
+    }
+
     return;
 
 }

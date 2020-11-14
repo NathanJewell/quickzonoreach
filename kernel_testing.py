@@ -8,7 +8,7 @@ import os
 
 here = os.path.dirname(os.path.abspath(__file__))
 here = "/home/nvidia/f1racing/quickzonoreach/quickzonoreach/"
-kernel_filename = "verts_test.cu" 
+kernel_filename = "verts_kernel.cu" 
 kernel_filepath = os.path.join(here, kernel_filename)
 with open(kernel_filepath, "r") as kernel_file:
     kernel_source_string = '\n'.join(kernel_file.readlines())
@@ -132,6 +132,9 @@ def test_sumvec_inplace(A, B):
     assert False not in np.isclose(A, result), "sumvec inplace - results not matched" 
 
     print("Sumvec Inplace case passed")
+
+#def test_sumvec_list(A):
+
 
 
 mat_A_dims = (1, 1)

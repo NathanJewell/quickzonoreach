@@ -37,19 +37,16 @@ if ENABLE_CUDA_LOAD:
     from quickzonoreach import kamenev_gpu
     here = os.path.dirname(os.path.abspath(__file__))
     kernel_filename = "verts_kernel.cu"
-    dummy_filename = "verts_dummy.cu" 
     kernel_filepath = os.path.join(here, kernel_filename)
-    dummy_filepath = os.path.join(here, dummy_filename)
     kernel_func_name = "find_supp_point"
+    dummy_func_name = "dummy_supp_point" 
+
     with open(kernel_filepath, "r") as kernel_file:
         kernel_source_string = '\n'.join(kernel_file.readlines())
         module = SourceModule(kernel_source_string, options=['-g'])
         full_kernel_fx = module.get_function(kernel_func_name)
+        dummy_kernel_fx = module.get_function(dummy_func_name)
 
-    with open(dummy_filepath, "r") as kernel_file:
-        kernel_source_string = '\n'.join(kernel_file.readlines())
-        module = SourceModule(kernel_source_string, options=['-g'])
-        dummy_kernel_fx = module.get_function(kernel_func_name)
 
     CUDA_LOADED = True
 
@@ -213,6 +210,8 @@ class Zonotope(Freezable):
     def maximize(self, vector):
         'get the maximum point of the zonotope in the passed-in direction'
 
+        import pdb
+        pdb.set_trace()
         rv = self.center.copy()
 
         # project vector (a generator) onto row, to check if it's positive or negative
@@ -289,13 +288,13 @@ class Zonotope(Freezable):
             #bind member variable locations to function call
             center_np = np.array(self.center).astype(np.float32)
             center_GPU = cuda.mem_alloc(center_np.nbytes)
-            cuda.memcpy_htod(center_GPU, center_np)
+            cuda.memcpy_htod(center_GPU, center_np.flatten())
 
             dims_np = np.dtype('int32').type(len(self.center))
 
             mat_tp_np = np.array(self.mat_t.transpose()).astype(np.float32)
             mat_tp_GPU = cuda.mem_alloc(mat_tp_np.nbytes)
-            cuda.memcpy_htod(mat_tp_GPU, mat_tp_np)
+            cuda.memcpy_htod(mat_tp_GPU, mat_tp_np.flatten())
 
             mat_tp_dims_np = np.array(mat_tp_np.shape).astype(np.int32)
             mat_tp_dims_GPU = cuda.mem_alloc(mat_tp_dims_np.nbytes)
@@ -303,12 +302,11 @@ class Zonotope(Freezable):
 
             init_bounds_np = np.array(self.init_bounds).astype(np.float32)
             init_bounds_GPU = cuda.mem_alloc(init_bounds_np.nbytes)
-            cuda.memcpy_htod(init_bounds_GPU, init_bounds_np)
+            cuda.memcpy_htod(init_bounds_GPU, init_bounds_np.flatten())
 
             init_bounds_dims_np = np.array(init_bounds_np.shape).astype(np.int32)
             init_bounds_dims_GPU = cuda.mem_alloc(init_bounds_dims_np.nbytes)
             cuda.memcpy_htod(init_bounds_dims_GPU, init_bounds_dims_np)
-
 
             gpu_static_data = (
                 center_GPU, dims_np, 
