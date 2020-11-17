@@ -194,6 +194,8 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
         hull = ConvexHull(verts)
 
         store = []
+        import pdb
+        pdb.set_trace()
         for i, simplex in enumerate(hull.simplices):
             is_new = False
 
@@ -226,8 +228,6 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
                 # add the point... at this point points may be added twice... this doesn't seem to matter
                 new_pts.append(supporting_pt)
         print(new_pts)
-        #import pdb
-        #pdb.set_trace()
     #points[hull.vertices]
 
     return np.array(verts, dtype=float), hull.equations

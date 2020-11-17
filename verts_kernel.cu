@@ -243,20 +243,20 @@ __global__ void find_supp_point(
         //__threadfence();
     //}
 
-    __threadfence();
+    __syncthreads();
 
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
     combined_dims[2] = mat_tp_dims[0] ;combined_dims[3] = 1;
 
     matvec(&rv_list[0], &normal[0], res_vec, combined_dims);
 
-    __threadfence();
+    __syncthreads();
 
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
     combined_dims[2] = normal[0];combined_dims[3] = 1;
     matadd_scalar(res_vec, -1 * rhs, res_vec, combined_dims); //operated in-place on input vector
 
-    __threadfence();
+    __syncthreads();
     //add the point if it is in the face
     if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
         if (res_vec[0] > 0.000000) {
