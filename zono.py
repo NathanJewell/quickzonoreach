@@ -315,7 +315,7 @@ class Zonotope(Freezable):
             #we will be passing these static class variables regardless
             gpu_func = partial(VERTS_KERNEL_FX, *gpu_static_data)
 
-            verts = kamenev.get_verts_gpu(2, max_func, gpu_func, epsilon=epsilon)
+            verts = kamenev.get_verts_gpu(2, max_func, gpu_func, min_block_size=mat_tp_np.shape, epsilon=epsilon)
 
             center_GPU.free()
             mat_tp_GPU.free()

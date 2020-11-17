@@ -142,10 +142,10 @@ def get_verts(dims, supp_point_func, epsilon=1e-7):
 
     return rv
 
-def get_verts_gpu(dims, supp_point_func, gpu_func, epsilon=1e-7):
+def get_verts_gpu(dims, supp_point_func, gpu_func, min_block_size=5, epsilon=1e-7):
     init_simplex = _find_init_simplex(dims, supp_point_func)
 
-    pts, _ = _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=epsilon)
+    pts, _ = _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=min_block_size, epsilon=epsilon)
 
     if dims == 2:
         # make sure verts are in order (for 2-d plotting)
@@ -226,14 +226,13 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
                 # add the point... at this point points may be added twice... this doesn't seem to matter
                 new_pts.append(supporting_pt)
         print(new_pts)
-        import pdb
-        pdb.set_trace()
-
+        #import pdb
+        #pdb.set_trace()
     #points[hull.vertices]
 
     return np.array(verts, dtype=float), hull.equations
 
-def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-5):
+def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, epsilon=1e-5):
     from pycuda import gpuarray
     import pycuda.driver as cuda
         
@@ -278,12 +277,14 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-5):
 
         #spawn block and make device call for each simplex
         grid_dims = (len(hull.simplices), 1, 1)
-        block_dims = ((10, 10, 1))
-
+        block_dims = (min_block_size[1], min_block_size[1], int(min_block_size[0]/min_block_size[1])+1)
+        print(min_block_size[0])
         #call cuda kernel for each stored (new) simplex IN: <simplices, first new index> OUT: <is_new_indices> 
         #find supporting points IN: <equations, center, transpose> OUT: <all verts supp pts>
         #product and add to find error <supp_point, jk
         #print("CALLED KERNEL")
+        #import pdb
+        #pdb.set_trace()
         gpu_func(
             #center_GPU, np.dtype('int32').type(len(center)),
             #mat_tp_GPU, mat_tp_dims_GPU,
@@ -303,6 +304,8 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-5):
         new_verts = new_verts[~np.all(new_verts == 0, axis=1)] 
         first_new_index = len(verts)
         print(new_verts)
+        #import pdb
+        #pdb.set_trace()
         verts = np.concatenate((verts, new_verts), axis=0) 
 
     print("DONE ZONO")

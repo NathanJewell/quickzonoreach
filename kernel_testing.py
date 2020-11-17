@@ -20,6 +20,7 @@ with open(kernel_filepath, "r") as kernel_file:
     matmul_scalar_gpu = module.get_function("matmul_scalar_global")
     sumveclist_gpu = module.get_function("sum_vec_list_global")
     sum_vec_inplace_gpu = module.get_function("sum_vec_inplace_global")
+    sum_veclist_gpu = module.get_function("sum_vec_list_global")
 
 import numpy as np
 #float*, float*, float*, int*
@@ -44,7 +45,7 @@ def sum_vec_inplace(A, B, length):
 
 #float*, int , int, int
 def sumveclist(A, spacing, length, vec_size):
-    pass
+    return np.sum(A, axis=0)
 
 
 def to_gpu(obj):
@@ -121,11 +122,11 @@ def test_matmul_scalar(A, B):
 def test_sumvec_inplace(A, B):
     assert A.shape[0] == B.shape[0], "mismatched vec sum dims"
     grid_dims = (1, 1, 1)
-    block_dims = tuple([1, A.shape[0], 1])
+    block_dims = tuple([A.shape[0], 1, 1])
     result = sum_vec_inplace(A, B, A.shape[0])
     A_gpu = to_gpu(A)
     B_gpu = to_gpu(B)
-    length = np.dtype('float32').type(A.shape[0])
+    length = np.dtype('int32').type(A.shape[0])
     sum_vec_inplace_gpu(A_gpu, B_gpu, length, block=block_dims, grid=grid_dims)
     cuda.memcpy_dtoh(A, A_gpu)
 
@@ -133,7 +134,25 @@ def test_sumvec_inplace(A, B):
 
     print("Sumvec Inplace case passed")
 
-#def test_sumvec_list(A):
+def test_sumvec_list(A):
+    grid_dims = (1, 1, 1)
+    block_dims = tuple([A.shape[1], A.shape[1], int(A.shape[0]/A.shape[1]) + 1])
+
+    A_gpu = to_gpu(A)
+    spacing = np.dtype('int32').type(1)
+    length = np.dtype('int32').type(int(A.shape[0]))
+    vec_size = np.dtype('int32').type(int(A.shape[1]))
+
+    result = sumveclist(A, spacing, length, vec_size)
+    sum_veclist_gpu(A_gpu, spacing, length, vec_size, block=block_dims, grid=grid_dims)
+
+    cuda.memcpy_dtoh(A, A_gpu)
+
+    assert False not in np.isclose(A[0], result), "sumvec list - results not matched"
+
+    print("Sumveclist case passed")
+
+    
 
 
 
@@ -143,6 +162,7 @@ mat_C_dims = (4, 6)
 mat_D_dims = (3, 4)
 mat_E_dims = (3, 4)
 mat_F_dims = (2, 4)
+mat_Z_dims = (20, 6)
 
 vec_A_dims = (1)
 vec_B_dims = (6)
@@ -156,6 +176,7 @@ mat_C = np.random.rand(*mat_C_dims).astype(np.float32)
 mat_D = np.random.rand(*mat_D_dims).astype(np.float32)
 mat_E = np.random.rand(*mat_E_dims).astype(np.float32)
 mat_F = np.random.rand(*mat_F_dims).astype(np.float32)
+mat_Z = np.random.rand(*mat_Z_dims).astype(np.float32)
 
 vec_A = np.random.rand(vec_A_dims).astype(np.float32)
 vec_B = np.random.rand(vec_B_dims).astype(np.float32)
@@ -186,6 +207,9 @@ test_matmul_scalar(mat_B, 100)
 test_sumvec_inplace(vec_B, vec_D)
 test_sumvec_inplace(vec_B, vec_B)
 test_sumvec_inplace(vec_C, vec_E)
+
+test_sumvec_list(mat_C)
+test_sumvec_list(mat_Z)
 
 
 

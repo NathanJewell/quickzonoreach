@@ -12,7 +12,7 @@ __device__ void matmul (
     int row = threadIdx.x;
     int col = threadIdx.y;
 
-    if ( col >= dims[3] || row >= dims[0] ) {
+    if ( col >= dims[3] || row >= dims[0] || threadIdx.z != 0) {
         //thread is out of bounds - will not execute anything
         return;
     }
@@ -38,7 +38,7 @@ __device__ void matvec (
 ) {
     int row = threadIdx.x;
 
-    if ( row >= dims[0] || threadIdx.y != 0 ) {
+    if ( row >= dims[0] || (threadIdx.y | threadIdx.z) != 0 ) {
         //thread is out of bounds - will not execute anything
         return;
     }
@@ -63,7 +63,7 @@ __device__ void matadd_scalar (
 
     int row = threadIdx.x;
     int col = threadIdx.y;
-    if ( row >= dims[0] || col >= dims[1] ) {
+    if ( row >= dims[0] || col >= dims[1] || threadIdx.z != 0) {
         //thread is out of bounds - will not execute anything
         return;
     }
@@ -82,7 +82,7 @@ __device__ void matmul_scalar (
 ) {
     int row = threadIdx.x;
     int col = threadIdx.y;
-    if ( row >= dims[0] || col >= dims[1] ) {
+    if ( row >= dims[0] || col >= dims[1] || threadIdx.z != 0) {
         //thread is out of bounds - will not execute anything
         return;
     }
@@ -96,9 +96,27 @@ __global__ void matmul_scalar_global (
     matmul_scalar(A, B, C, dims);
 }
 
+__device__ void vecmul_scalar (
+    float *A, float B, float *C, int * dims
+) {
+    int col = threadIdx.x;
+    if (col >= dims[1] ) {
+        //thread is out of bounds - will not execute anything
+        return;
+    }
+
+    C[col] = A[col] * B;
+}
+
+__global__ void vecmul_scalar_global (
+    float *A, float B, float *C, int * dims
+) {
+    vecmul_scalar(A, B, C, dims);
+}
+
 //A and B must have same dims
 __device__ void sum_vec_inplace(float *A, float *B, int vec_size) {
-    int col = threadIdx.y;
+    int col = threadIdx.x;
     if (col < vec_size) {
         A[col] = A[col] + B[col];
     }
@@ -115,13 +133,18 @@ __device__ void sum_vec_list (
 //vecsize is length of vectors within the list
 //spacing is the number of vectors between result vectors after this operation
 //length is the total number of entries
-    if (threadIdx.x >= int(length / spacing)) return; //threadIdx.x represents location within list
-    if (threadIdx.y >= vec_size) return; //threadIdx.y represents location within vector
-    int node = threadIdx.x * spacing * vec_size; //location of this sums result
+    int list_idx = threadIdx.z * blockDim.y + threadIdx.y;
+    if (list_idx >= int(length / spacing)) return; //threadIdx.x and z represents location within list
+    if (threadIdx.x >= vec_size) return; //threadIdx.y represents location within vector
+    int node = list_idx * spacing * vec_size; //location of this sums result
     int other = node + (spacing) * vec_size;
     if (other >= (length * vec_size)) return; //A[node] = A[node]
     sum_vec_inplace(&A[node], &A[other], vec_size);
     //A[node] = A[node] + A[node + spacing * vec_size];
+    __threadfence();
+    if (spacing <= (length/2) + 1) {
+        sum_vec_list(A, spacing*2, length, vec_size);
+    }
 }
 
 __global__ void sum_vec_list_global (
@@ -149,14 +172,13 @@ __global__ void find_supp_point(
     __shared__ float * rv_list;
     __shared__ bool is_new;
 
-    __threadfence();
-
     int row = blockIdx.x;
     int idx = threadIdx.y * gridDim.x + threadIdx.x;
     int xdim = 0; int ydim = 1;
 
     //check if the simplex (per block) is new
     if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
+        if (blockIdx.x >= simplices_dims[0]) return;
         is_new = false; 
 
         for (int k = 0; k < simplices_dims[1]; k++){
@@ -195,36 +217,40 @@ __global__ void find_supp_point(
 
     __syncthreads();
 
-    if (threadIdx.x < mat_tp_dims[0]) {
+    int rv_row = threadIdx.z * blockDim.y + threadIdx.y;
+    if (rv_row < mat_tp_dims[0]) {
         float factor; 
-        if (res_vec[threadIdx.x] >= 0) {
-            factor = init_bounds[threadIdx.x * init_bounds_dims[1] + 1];
+        if (res_vec[rv_row] >= 0) {
+            factor = init_bounds[rv_row * init_bounds_dims[1] + 1];
         } else {
-            factor = init_bounds[threadIdx.x * init_bounds_dims[1]];
+            factor = init_bounds[rv_row * init_bounds_dims[1]];
         }
         //1d vector by scalar
-        combined_dims[0] = mat_tp_dims[1]; combined_dims[1] = 1;
-        combined_dims[2] = 1;combined_dims[3] = 1;
-        matmul_scalar(&mat_tp[threadIdx.x * mat_tp_dims[1]], factor, &rv_list[(threadIdx.x+1)*mat_tp_dims[1]], combined_dims);
+        combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[1];
+        combined_dims[2] = 1;combined_dims[3] = mat_tp_dims[1];
+        vecmul_scalar(&mat_tp[rv_row * mat_tp_dims[1]], factor, &rv_list[(rv_row+1)*mat_tp_dims[1]], combined_dims);
     }
     //append center to rv_list
     //sum rv_list into res_vec
     __syncthreads();
-    int spacing = 1;
-    while ( spacing <= (mat_tp_dims[1]/2)) {
-        sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
-        spacing = spacing * 2;
-        __threadfence();
-    }
 
-    __syncthreads();
+    int spacing = 1;
+    sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
+
+    //while ( spacing <= ((mat_tp_dims[0]/2) + 1)) {
+        //sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
+        //spacing = spacing * 2;
+        //__threadfence();
+    //}
+
+    __threadfence();
 
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
     combined_dims[2] = mat_tp_dims[0] ;combined_dims[3] = 1;
 
     matvec(&rv_list[0], &normal[0], res_vec, combined_dims);
 
-    __syncthreads();
+    __threadfence();
 
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
     combined_dims[2] = normal[0];combined_dims[3] = 1;
@@ -238,7 +264,6 @@ __global__ void find_supp_point(
             new_verts[row*2+1] = rv_list[ydim];
         }
     }
-
     //free(max_vec);
     //free(res_vec);
     //free(rv_list);
