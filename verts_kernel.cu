@@ -117,7 +117,7 @@ __device__ void sum_vec_list (
 //length is the total number of entries
     if (threadIdx.x >= int(length / spacing)) return; //threadIdx.x represents location within list
     if (threadIdx.y >= vec_size) return; //threadIdx.y represents location within vector
-    int node = threadIdx.x * spacing * vec_size + threadIdx.y; //location of this sums result
+    int node = threadIdx.x * spacing * vec_size; //location of this sums result
     int other = node + (spacing) * vec_size;
     if (other >= (length * vec_size)) return; //A[node] = A[node]
     sum_vec_inplace(&A[node], &A[other], vec_size);
@@ -149,6 +149,8 @@ __global__ void find_supp_point(
     __shared__ float * rv_list;
     __shared__ bool is_new;
 
+    __threadfence();
+
     int row = blockIdx.x;
     int idx = threadIdx.y * gridDim.x + threadIdx.x;
     int xdim = 0; int ydim = 1;
@@ -167,7 +169,7 @@ __global__ void find_supp_point(
         if (!is_new) return;
 
         //setup some block-shared variables
-        int eq_idx = row * simplices_dims[1];
+        int eq_idx = row * equations_dims[0];
         normal[0] = equations[eq_idx];
         normal[1] = equations[eq_idx+1]; //all but last element in row
         rhs = -1 * equations[eq_idx + 2]; //-1 * last element in row
@@ -176,7 +178,7 @@ __global__ void find_supp_point(
         max_vec = (float *)malloc(dims * sizeof(float));
         rv_list = (float *)malloc(((mat_tp_dims[0]+1) * mat_tp_dims[1])* sizeof(float));
         memset(max_vec, 0, dims*sizeof(float));
-        memcpy(res_vec, center, dims * sizeof(float));
+        memcpy(rv_list, center, dims * sizeof(float));
         max_vec[xdim] = normal[0];
         max_vec[ydim] = normal[1];
         
@@ -188,7 +190,7 @@ __global__ void find_supp_point(
 
     int combined_dims[4] = { mat_tp_dims[0], mat_tp_dims[1], dims, 1};
     //matvec(mat_tp, max_vec, res_vec, combined_dims);
-    matvec(mat_tp, max_vec, rv_list, combined_dims); //first elem of rv_list is rv
+    matvec(mat_tp, max_vec, res_vec, combined_dims); //first elem of rv_list is rv
     //res_vec is matrix of shape (mat_tp_dims[0] x 1)
 
     __syncthreads();
@@ -208,13 +210,11 @@ __global__ void find_supp_point(
     //append center to rv_list
     //sum rv_list into res_vec
     __syncthreads();
-    if (blockIdx.x == 0) {
-        int spacing = 1;
-        while ( spacing <= (mat_tp_dims[1]/2)) {
-            sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
-            spacing = spacing * 2;
-            __threadfence();
-        }
+    int spacing = 1;
+    while ( spacing <= (mat_tp_dims[1]/2)) {
+        sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
+        spacing = spacing * 2;
+        __threadfence();
     }
 
     __syncthreads();
@@ -222,7 +222,7 @@ __global__ void find_supp_point(
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
     combined_dims[2] = mat_tp_dims[0] ;combined_dims[3] = 1;
 
-    matmul(&rv_list[0], &normal[0], res_vec, combined_dims);
+    matvec(&rv_list[0], &normal[0], res_vec, combined_dims);
 
     __syncthreads();
 
@@ -230,10 +230,13 @@ __global__ void find_supp_point(
     combined_dims[2] = normal[0];combined_dims[3] = 1;
     matadd_scalar(res_vec, -1 * rhs, res_vec, combined_dims); //operated in-place on input vector
 
+    __threadfence();
     //add the point if it is in the face
-    if (res_vec[0] >= epsilon) {
-        new_verts[row] = rv_list[xdim];
-        new_verts[row+1] = rv_list[ydim];
+    if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
+        if (res_vec[0] > 0.000000) {
+            new_verts[row*2] = rv_list[xdim];
+            new_verts[row*2+1] = rv_list[ydim];
+        }
     }
 
     //free(max_vec);

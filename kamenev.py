@@ -205,8 +205,6 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             if not is_new:
                 continue # skip this simplex
 
-            import pdb
-            pdb.set_trace()
             # get hyperplane for simplex
             normal = hull.equations[i, :-1]
             rhs = -1 * hull.equations[i, -1]
@@ -217,6 +215,7 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             #import pdb
             #pdb.set_trace()
             supporting_pt = supp_point_func(normal)
+
             
             error = np.dot(supporting_pt, normal) - rhs
             max_error = max(max_error, error)
@@ -226,12 +225,15 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             if error >= epsilon:
                 # add the point... at this point points may be added twice... this doesn't seem to matter
                 new_pts.append(supporting_pt)
+        print(new_pts)
+        import pdb
+        pdb.set_trace()
 
     #points[hull.vertices]
 
     return np.array(verts, dtype=float), hull.equations
 
-def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
+def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-5):
     from pycuda import gpuarray
     import pycuda.driver as cuda
         
@@ -264,6 +266,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
             raise RuntimeError #"CRITICAL ERROR, max_gpu_array_size is overrun"
 
         #copy empty data to vertices array
+        new_verts = np.zeros((max_array_size, verts.shape[1]), dtype=np.float32)
         cuda.memcpy_htod(new_verts_GPU, new_verts)
 
         #copy hull data to gpu asynchronously
@@ -295,12 +298,14 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, epsilon=1e-7):
         print("Made call")
         #wait for hull data copy to finish
         #pycuda.wait_for_async
-        #cuda.Context.synchronize()
+        cuda.Context.synchronize()
         cuda.memcpy_dtoh(new_verts, new_verts_GPU)
         new_verts = new_verts[~np.all(new_verts == 0, axis=1)] 
         first_new_index = len(verts)
+        print(new_verts)
         verts = np.concatenate((verts, new_verts), axis=0) 
 
+    print("DONE ZONO")
 
     #points[hull.vertices]
     new_verts_GPU.free()

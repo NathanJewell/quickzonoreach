@@ -210,8 +210,6 @@ class Zonotope(Freezable):
     def maximize(self, vector):
         'get the maximum point of the zonotope in the passed-in direction'
 
-        import pdb
-        pdb.set_trace()
         rv = self.center.copy()
 
         # project vector (a generator) onto row, to check if it's positive or negative
