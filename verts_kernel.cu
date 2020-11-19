@@ -165,12 +165,13 @@ __global__ void find_supp_point(
     ) {
 
     //block id determines which simplex is being looked at
-    __shared__ float normal[2];
-    __shared__ float rhs;
-    __shared__ float * res_vec;
-    __shared__ float * max_vec; 
-    __shared__ float * rv_list;
-    __shared__ bool is_new;
+    extern __shared__ float s[];
+    float * res_vec = s;
+    float * max_vec = (float*)&res_vec[sizeof(float) * mat_tp_dims[1]];
+    float * rv_list = (float*)&max_vec[dims * sizeof(float)];
+    float * normal = (float*)&rv_list[(mat_tp_dims[0] + 1) * mat_tp_dims[1] * sizeof(float)];
+    float * rhs = (float *)&normal[sizeof(float) * 2];
+    bool * is_new = (bool*)&rhs[sizeof(float)];
 
     int row = blockIdx.x;
     int idx = threadIdx.y * gridDim.x + threadIdx.x;
@@ -179,26 +180,26 @@ __global__ void find_supp_point(
     //check if the simplex (per block) is new
     if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
         if (blockIdx.x >= simplices_dims[0]) return;
-        is_new = false; 
+        *is_new = false; 
 
         for (int k = 0; k < simplices_dims[1]; k++){
             if (simplices[row*simplices_dims[1] + k] >= first_new_index) {
-                is_new = true;
+                *is_new = true;
                 break;
             }
         }
 
-        if (!is_new) return;
+        if (!is_new[0]) return;
 
         //setup some block-shared variables
         int eq_idx = row * equations_dims[0];
         normal[0] = equations[eq_idx];
         normal[1] = equations[eq_idx+1]; //all but last element in row
-        rhs = -1 * equations[eq_idx + 2]; //-1 * last element in row
+        rhs[0] = -1 * equations[eq_idx + 2]; //-1 * last element in row
 
-        res_vec = (float *)malloc( sizeof(float) * mat_tp_dims[0] * 1 );
-        max_vec = (float *)malloc(dims * sizeof(float));
-        rv_list = (float *)malloc(((mat_tp_dims[0]+1) * mat_tp_dims[1])* sizeof(float));
+        //res_vec = (float *)malloc( sizeof(float) * mat_tp_dims[0] * 1 );
+        //max_vec = (float *)malloc(dims * sizeof(float));
+        //rv_list = (float *)malloc(((mat_tp_dims[0]+1) * mat_tp_dims[1])* sizeof(float));
         memset(max_vec, 0, dims*sizeof(float));
         memcpy(rv_list, center, dims * sizeof(float));
         max_vec[xdim] = normal[0];
@@ -208,7 +209,7 @@ __global__ void find_supp_point(
 
     //sync threads so we can increase concurrency
     __syncthreads();
-    if (!is_new) return; //nothing further in this block - allready computed
+    if (!is_new[0]) return; //nothing further in this block - allready computed
 
     int combined_dims[4] = { mat_tp_dims[0], mat_tp_dims[1], dims, 1};
     //matvec(mat_tp, max_vec, res_vec, combined_dims);
@@ -237,12 +238,6 @@ __global__ void find_supp_point(
     int spacing = 1;
     sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
 
-    //while ( spacing <= ((mat_tp_dims[0]/2) + 1)) {
-        //sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
-        //spacing = spacing * 2;
-        //__threadfence();
-    //}
-
     __syncthreads();
 
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
@@ -254,12 +249,12 @@ __global__ void find_supp_point(
 
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
     combined_dims[2] = normal[0];combined_dims[3] = 1;
-    matadd_scalar(res_vec, -1 * rhs, res_vec, combined_dims); //operated in-place on input vector
+    matadd_scalar(res_vec, -1 * rhs[0], res_vec, combined_dims); //operated in-place on input vector
 
     __syncthreads();
     //add the point if it is in the face
     if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
-        if (res_vec[0] > 0.000000) {
+        if (res_vec[0] > 0.0000001) {
             new_verts[row*2] = rv_list[xdim];
             new_verts[row*2+1] = rv_list[ydim];
         }

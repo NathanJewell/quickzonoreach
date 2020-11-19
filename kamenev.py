@@ -274,6 +274,18 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
         cuda.memcpy_htod(equations_GPU, hull.equations.astype(np.float32).flatten())
         cuda.memcpy_htod(equations_dims_GPU, np.asarray(hull.equations.shape).astype(np.int32))
 
+        #res_vec = (float *)malloc( sizeof(float) * mat_tp_dims[0] * 1 );
+        #max_vec = (float *)malloc(dims * sizeof(float));
+        #rv_list = (float *)malloc(((mat_tp_dims[0]+1) * mat_tp_dims[1])* sizeof(float));
+        #compute needed amount of shared memory for each block
+        #shared memory for res_vec
+        #shared memory for max_vec
+        #shared memory for rv_list
+        shared_mem = 4 * (min_block_size[1] + min_block_size[1] + (min_block_size[0] + 1) * (min_block_size[1])) + 1 + 8 + 4
+        print(f"Shared mem size is {shared_mem}")
+        #import pdb
+        #pdb.set_trace()
+
 
         #spawn block and make device call for each simplex
         grid_dims = (len(hull.simplices), 1, 1)
@@ -294,7 +306,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
             equations_GPU, equations_dims_GPU,
             np.dtype('float32').type(epsilon),
             np.dtype('int32').type(first_new_index),
-            block=block_dims, grid=grid_dims
+            block=block_dims, grid=grid_dims, shared=shared_mem*4
         )
         print("Made call")
         #wait for hull data copy to finish
