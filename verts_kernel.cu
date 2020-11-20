@@ -36,9 +36,9 @@ __global__ void matmul_global (
 __device__ void matvec (
     float *A, float *B, float *C, int *dims
 ) {
-    int row = threadIdx.x;
+    int row = threadIdx.x * blockDim.z + threadIdx.z;
 
-    if ( row >= dims[0] || (threadIdx.y | threadIdx.z) != 0 ) {
+    if ( row >= dims[0] || (threadIdx.y) != 0 ) {
         //thread is out of bounds - will not execute anything
         return;
     }
@@ -167,7 +167,7 @@ __global__ void find_supp_point(
     //block id determines which simplex is being looked at
     extern __shared__ float s[];
     float * res_vec = s;
-    float * max_vec = (float*)&res_vec[sizeof(float) * mat_tp_dims[1]];
+    float * max_vec = (float*)&res_vec[sizeof(float) * mat_tp_dims[0]];
     float * rv_list = (float*)&max_vec[dims * sizeof(float)];
     float * normal = (float*)&rv_list[(mat_tp_dims[0] + 1) * mat_tp_dims[1] * sizeof(float)];
     float * rhs = (float *)&normal[sizeof(float) * 2];
@@ -192,7 +192,7 @@ __global__ void find_supp_point(
         if (!is_new[0]) return;
 
         //setup some block-shared variables
-        int eq_idx = row * equations_dims[0];
+        int eq_idx = row * equations_dims[1];
         normal[0] = equations[eq_idx];
         normal[1] = equations[eq_idx+1]; //all but last element in row
         rhs[0] = -1 * equations[eq_idx + 2]; //-1 * last element in row

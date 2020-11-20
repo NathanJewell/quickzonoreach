@@ -7,7 +7,7 @@ import skcuda.cublas as cublas
 import os
 
 here = os.path.dirname(os.path.abspath(__file__))
-here = "/home/nvidia/f1racing/quickzonoreach/quickzonoreach/"
+here = "/home/dev/cuda-venv/src/quickzonoreach/"
 kernel_filename = "verts_kernel.cu" 
 kernel_filepath = os.path.join(here, kernel_filename)
 with open(kernel_filepath, "r") as kernel_file:
