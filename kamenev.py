@@ -182,12 +182,17 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
     iteration = 0
     max_error = None
 
+
+    #_____________________-
+    repeat_iter = False
+
     while new_pts:
-        iteration += 1
         #print(f"\nIteration {iteration}. Verts: {len(verts)}, new_pts: {len(new_pts)}, max_error: {max_error}")
                 
-        first_new_index = len(verts)
-        verts += new_pts
+        if not repeat_iter:
+            iteration += 1
+            first_new_index = len(verts)
+            verts += new_pts
         new_pts = []
         all_new = []
         max_error = 0
@@ -195,8 +200,6 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
         hull = ConvexHull(verts)
 
         store = []
-        #import pdb
-        #pdb.set_trace()
         for i, simplex in enumerate(hull.simplices):
             is_new = False
 
@@ -228,10 +231,12 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             if error >= epsilon:
                 # add the point... at this point points may be added twice... this doesn't seem to matter
                 new_pts.append(supporting_pt)
-                all_new.append(supporting_pt)
+                all_new.append(list(supporting_pt))
             else:
-                all_new.append([0, 0])
-        print(f"ITER: {iteration} {all_new}")
+                all_new.append(supporting_pt + [0])
+        print(f"ITER: {iteration} {np.asarray(all_new)}")
+        #import pdb
+        #pdb.set_trace()
     #points[hull.vertices]
 
     return np.array(verts, dtype=float), hull.equations
@@ -245,7 +250,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
 
     iteration = 0
     first_new_index = 0
-    new_verts = None
+    new_verts = []
 
     max_array_size = 300
     new_verts_empty = np.zeros((max_array_size, verts.shape[1]), dtype=np.float32)
@@ -256,8 +261,14 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
     equations_GPU = cuda.mem_alloc(max_array_size * np.dtype(np.float32).itemsize)
     equations_dims_GPU = cuda.mem_alloc(2 * np.dtype(np.int32).itemsize)
 
+    #_____________________-
+    repeat_iter = False
+    #_____________________-
+
     while len(verts) > first_new_index:
-        iteration += 1
+        new_verts = []
+        if not repeat_iter:
+            iteration += 1
         #print(f"\nIteration {iteration}. Verts: {len(verts)}, new_pts: {len(new_pts)}, max_error: {max_error}")
                 
         #copy verts from gpu
@@ -310,19 +321,20 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
             equations_GPU, equations_dims_GPU,
             np.dtype('float32').type(epsilon),
             np.dtype('int32').type(first_new_index),
-            block=block_dims, grid=grid_dims, shared=shared_mem*8
+            block=block_dims, grid=grid_dims, shared=shared_mem*16
         )
         print("Made call")
         #wait for hull data copy to finish
         #pycuda.wait_for_async
         cuda.Context.synchronize()
         cuda.memcpy_dtoh(new_verts, new_verts_GPU)
-        print(f"ITER: {iteration} {new_verts[:6]}")
         new_verts = new_verts[~np.all(new_verts == 0, axis=1)] 
-        first_new_index = len(verts)
+        print(f"ITER: {iteration} {new_verts}")
         #import pdb
         #pdb.set_trace()
-        verts = np.concatenate((verts, new_verts), axis=0) 
+        if not repeat_iter:
+            first_new_index = len(verts)
+            verts = np.concatenate((verts, new_verts), axis=0) 
 
     print("DONE ZONO")
 

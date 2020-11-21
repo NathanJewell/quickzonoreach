@@ -167,11 +167,11 @@ __global__ void find_supp_point(
     //block id determines which simplex is being looked at
     extern __shared__ float s[];
     float * res_vec = s;
-    float * max_vec = (float*)&res_vec[sizeof(float) * mat_tp_dims[0]];
-    float * rv_list = (float*)&max_vec[dims * sizeof(float)];
-    float * normal = (float*)&rv_list[(mat_tp_dims[0] + 1) * mat_tp_dims[1] * sizeof(float)];
-    float * rhs = (float *)&normal[sizeof(float) * 2];
-    bool * is_new = (bool*)&rhs[sizeof(float)];
+    float * max_vec = (float*)&res_vec[sizeof(float) * mat_tp_dims[0] *2];
+    float * rv_list = (float*)&max_vec[dims * sizeof(float) * 2];
+    float * normal = (float*)&rv_list[(mat_tp_dims[0] + 1) * mat_tp_dims[1] * sizeof(float) * 2];
+    float * rhs = (float *)&normal[sizeof(float) * 2 * 2];
+    bool * is_new = (bool*)&rhs[sizeof(float) * 2];
 
     int row = blockIdx.x;
     int idx = threadIdx.y * gridDim.x + threadIdx.x;
@@ -238,6 +238,11 @@ __global__ void find_supp_point(
     int spacing = 1;
     sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
 
+    //if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
+        //new_verts[row*2] = rv_list[xdim];
+        //new_verts[row*2+1] = rv_list[ydim];
+    //}
+
     __syncthreads();
 
     combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
@@ -254,6 +259,9 @@ __global__ void find_supp_point(
     __syncthreads();
     //add the point if it is in the face
     if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
+        //if (res_vec[0] <= 0.0000001) {
+            //new_verts[row*2] = 0;
+            //new_verts[row*2+1] = 0;
         if (res_vec[0] > 0.0000001) {
             new_verts[row*2] = rv_list[xdim];
             new_verts[row*2+1] = rv_list[ydim];
