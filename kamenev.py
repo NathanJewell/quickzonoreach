@@ -222,8 +222,8 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             #pdb.set_trace()
             supporting_pt = supp_point_func(normal)
 
-            
             error = np.dot(supporting_pt, normal) - rhs
+            
             max_error = max(max_error, error)
 
             assert error >= -1e-7, "supporting point was inside facet?"
@@ -305,7 +305,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
         #spawn block and make device call for each simplex
         grid_dims = (len(hull.simplices), 1, 1)
         block_dims = (min_block_size[1], min_block_size[1], int(min_block_size[0]/min_block_size[1])+1)
-        print(min_block_size[0])
+        print(block_dims)
         #call cuda kernel for each stored (new) simplex IN: <simplices, first new index> OUT: <is_new_indices> 
         #find supporting points IN: <equations, center, transpose> OUT: <all verts supp pts>
         #product and add to find error <supp_point, jk
@@ -321,7 +321,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
             equations_GPU, equations_dims_GPU,
             np.dtype('float32').type(epsilon),
             np.dtype('int32').type(first_new_index),
-            block=block_dims, grid=grid_dims, shared=shared_mem*16
+            block=block_dims, grid=grid_dims, shared=shared_mem*8
         )
         print("Made call")
         #wait for hull data copy to finish

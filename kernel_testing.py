@@ -163,12 +163,14 @@ mat_D_dims = (3, 4)
 mat_E_dims = (3, 4)
 mat_F_dims = (2, 4)
 mat_Z_dims = (20, 6)
+mat_ZZ_dims = (1, 2)
 
 vec_A_dims = (1)
 vec_B_dims = (6)
 vec_C_dims = (10)
 vec_D_dims = (6)
 vec_E_dims = (10)
+vec_Z_dims = (2)
 
 mat_A = np.random.rand(*mat_A_dims).astype(np.float32)
 mat_B = np.random.rand(*mat_B_dims).astype(np.float32)
@@ -177,12 +179,14 @@ mat_D = np.random.rand(*mat_D_dims).astype(np.float32)
 mat_E = np.random.rand(*mat_E_dims).astype(np.float32)
 mat_F = np.random.rand(*mat_F_dims).astype(np.float32)
 mat_Z = np.random.rand(*mat_Z_dims).astype(np.float32)
+mat_ZZ = np.random.rand(*mat_ZZ_dims).astype(np.float32)
 
 vec_A = np.random.rand(vec_A_dims).astype(np.float32)
 vec_B = np.random.rand(vec_B_dims).astype(np.float32)
 vec_C = np.random.rand(vec_C_dims).astype(np.float32)
 vec_D = np.random.rand(vec_D_dims).astype(np.float32)
 vec_E = np.random.rand(vec_E_dims).astype(np.float32)
+vec_Z = np.random.rand(vec_Z_dims).astype(np.float32)
 
 
 #dims = np.asarray(list(mat_A.shape) + list(mat_A.shape), dtype=np.int32)
@@ -194,6 +198,7 @@ test_matmul(mat_B, mat_C)
 
 test_matvec(mat_A, vec_A)
 test_matvec(mat_C, vec_B)
+test_matvec(mat_ZZ, vec_Z)
 
 
 test_matadd_scalar(mat_A, 5)

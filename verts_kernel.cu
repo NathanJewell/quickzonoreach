@@ -133,15 +133,19 @@ __device__ void sum_vec_list (
 //vecsize is length of vectors within the list
 //spacing is the number of vectors between result vectors after this operation
 //length is the total number of entries
-    int list_idx = threadIdx.z * blockDim.y + threadIdx.y;
+    int list_idx = (threadIdx.z * blockDim.y + threadIdx.y) * 2; //each block is adding two vectors
     if (list_idx >= int(length / spacing)) return; //threadIdx.x and z represents location within list
     if (threadIdx.x >= vec_size) return; //threadIdx.y represents location within vector
     int node = list_idx * spacing * vec_size; //location of this sums result
     int other = node + (spacing) * vec_size;
     if (other >= (length * vec_size)) return; //A[node] = A[node]
+    __syncthreads();
+    __syncwarp();
+
     sum_vec_inplace(&A[node], &A[other], vec_size);
     //A[node] = A[node] + A[node + spacing * vec_size];
-    __threadfence();
+    __syncthreads();
+    __syncwarp();
     if (spacing <= (length/2) + 1) {
         sum_vec_list(A, spacing*2, length, vec_size);
     }
@@ -164,19 +168,33 @@ __global__ void find_supp_point(
     int first_new_index
     ) {
 
-    //block id determines which simplex is being looked at
+    //compute shared memory array sizes
+    int res_vec_size = sizeof(float) * mat_tp_dims[0] *2;
+    int max_vec_size = dims * sizeof(float) * 2;
+    int rv_list_size = (mat_tp_dims[0] + 1) * mat_tp_dims[1] * sizeof(float) * 2;
+    int normal_size = sizeof(float) * 2 * 2;
+    int rhs_size =sizeof(float) * 2;
+    int is_new_size = sizeof(bool) * 2;
+
+    //assign thread-scoped variables for shared memory access
     extern __shared__ float s[];
     float * res_vec = s;
-    float * max_vec = (float*)&res_vec[sizeof(float) * mat_tp_dims[0] *2];
-    float * rv_list = (float*)&max_vec[dims * sizeof(float) * 2];
-    float * normal = (float*)&rv_list[(mat_tp_dims[0] + 1) * mat_tp_dims[1] * sizeof(float) * 2];
-    float * rhs = (float *)&normal[sizeof(float) * 2 * 2];
-    bool * is_new = (bool*)&rhs[sizeof(float) * 2];
+    float * max_vec = (float*)&res_vec[res_vec_size];
+    float * rv_list = (float*)&max_vec[max_vec_size];
+    float * normal = (float*)&rv_list[rv_list_size];
+    float * rhs = (float *)&normal[normal_size];
+    bool * is_new = (bool*)&rhs[rhs_size];
 
+
+    //block id determines which simplex is being looked at
     int row = blockIdx.x;
     int idx = threadIdx.y * gridDim.x + threadIdx.x;
     int xdim = 0; int ydim = 1;
 
+    //set all shared memory to 0
+    memset(s, 0, res_vec_size + max_vec_size + rv_list_size + normal_size + rhs_size + is_new_size);
+
+    __syncthreads();
     //check if the simplex (per block) is new
     if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
         if (blockIdx.x >= simplices_dims[0]) return;
@@ -197,11 +215,7 @@ __global__ void find_supp_point(
         normal[1] = equations[eq_idx+1]; //all but last element in row
         rhs[0] = -1 * equations[eq_idx + 2]; //-1 * last element in row
 
-        //res_vec = (float *)malloc( sizeof(float) * mat_tp_dims[0] * 1 );
-        //max_vec = (float *)malloc(dims * sizeof(float));
-        //rv_list = (float *)malloc(((mat_tp_dims[0]+1) * mat_tp_dims[1])* sizeof(float));
-        memset(max_vec, 0, dims*sizeof(float));
-        memcpy(rv_list, center, dims * sizeof(float));
+        memcpy(rv_list, center, dims * sizeof(float)); 
         max_vec[xdim] = normal[0];
         max_vec[ydim] = normal[1];
         
@@ -209,7 +223,7 @@ __global__ void find_supp_point(
 
     //sync threads so we can increase concurrency
     __syncthreads();
-    if (!is_new[0]) return; //nothing further in this block - allready computed
+    if (!is_new[0]) return; //nothing further in this block - allready computed simplex
 
     int combined_dims[4] = { mat_tp_dims[0], mat_tp_dims[1], dims, 1};
     //matvec(mat_tp, max_vec, res_vec, combined_dims);
@@ -218,6 +232,7 @@ __global__ void find_supp_point(
 
     __syncthreads();
 
+    //compute factors and add all values to list
     int rv_row = threadIdx.z * blockDim.y + threadIdx.y;
     if (rv_row < mat_tp_dims[0]) {
         float factor; 
@@ -231,13 +246,14 @@ __global__ void find_supp_point(
         combined_dims[2] = 1;combined_dims[3] = mat_tp_dims[1];
         vecmul_scalar(&mat_tp[rv_row * mat_tp_dims[1]], factor, &rv_list[(rv_row+1)*mat_tp_dims[1]], combined_dims);
     }
-    //append center to rv_list
-    //sum rv_list into res_vec
     __syncthreads();
 
+    //perform distributed sum of rv_list vectors across threadIdx.z
     int spacing = 1;
     sum_vec_list(rv_list, spacing, mat_tp_dims[0] + 1, mat_tp_dims[1]);
+    //result is in rvlist[0] through rvlist[mat_tp_dims[1]-1]
 
+    //extra code for saving and printing all potential supporting points in debugging
     //if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
         //new_verts[row*2] = rv_list[xdim];
         //new_verts[row*2+1] = rv_list[ydim];
@@ -245,31 +261,31 @@ __global__ void find_supp_point(
 
     __syncthreads();
 
-    combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
-    combined_dims[2] = mat_tp_dims[0] ;combined_dims[3] = 1;
+    combined_dims[0] = 1; combined_dims[1] = 2;
+    combined_dims[2] = 2;combined_dims[3] = 1;
 
-    matvec(&rv_list[0], &normal[0], res_vec, combined_dims);
+    matvec(rv_list, normal, res_vec, combined_dims);
 
     __syncthreads();
 
-    combined_dims[0] = 1; combined_dims[1] = mat_tp_dims[0];
-    combined_dims[2] = normal[0];combined_dims[3] = 1;
+    combined_dims[0] = 1; combined_dims[1] = 2;
+    combined_dims[2] = 1;combined_dims[3] = 1;
     matadd_scalar(res_vec, -1 * rhs[0], res_vec, combined_dims); //operated in-place on input vector
 
     __syncthreads();
-    //add the point if it is in the face
     if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
+    //extra code for saving and printing all potential supporting points in debugging
         //if (res_vec[0] <= 0.0000001) {
             //new_verts[row*2] = 0;
             //new_verts[row*2+1] = 0;
+
+        //add the point if it is in the face
         if (res_vec[0] > 0.0000001) {
             new_verts[row*2] = rv_list[xdim];
             new_verts[row*2+1] = rv_list[ydim];
         }
     }
-    //free(max_vec);
-    //free(res_vec);
-    //free(rv_list);
+
     return;
 
 }
