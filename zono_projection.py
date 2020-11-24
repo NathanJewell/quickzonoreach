@@ -78,6 +78,8 @@ class CPU_MP_ZP(ZonoProcessor):
     def verts(self, zonos):
         return list(self.process_pool.map(Zonotope.verts_cpu, zonos))
 
+#class GPUThread(threading.Thread):
+    #def __init__(self, number):
 
 class GPU_DUMMY_ZP(ZonoProcessor):
     def __init__(self, zp_type):

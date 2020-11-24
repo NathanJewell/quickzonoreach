@@ -39,7 +39,7 @@ if ENABLE_CUDA_LOAD:
     kernel_filename = "verts_kernel.cu"
     kernel_filepath = os.path.join(here, kernel_filename)
     kernel_func_name = "find_supp_point"
-    dummy_func_name = "dummy_supp_point" 
+    dummy_func_name = "find_supp_point" 
 
     with open(kernel_filepath, "r") as kernel_file:
         kernel_source_string = '\n'.join(kernel_file.readlines())

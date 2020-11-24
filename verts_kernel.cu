@@ -139,13 +139,11 @@ __device__ void sum_vec_list (
     int node = list_idx * spacing * vec_size; //location of this sums result
     int other = node + (spacing) * vec_size;
     if (other >= (length * vec_size)) return; //A[node] = A[node]
-    __syncthreads();
-    __syncwarp();
 
     sum_vec_inplace(&A[node], &A[other], vec_size);
     //A[node] = A[node] + A[node + spacing * vec_size];
     __syncthreads();
-    __syncwarp();
+
     if (spacing <= (length/2) + 1) {
         sum_vec_list(A, spacing*2, length, vec_size);
     }
@@ -226,7 +224,6 @@ __global__ void find_supp_point(
     if (!is_new[0]) return; //nothing further in this block - allready computed simplex
 
     int combined_dims[4] = { mat_tp_dims[0], mat_tp_dims[1], dims, 1};
-    //matvec(mat_tp, max_vec, res_vec, combined_dims);
     matvec(mat_tp, max_vec, res_vec, combined_dims); //first elem of rv_list is rv
     //res_vec is matrix of shape (mat_tp_dims[0] x 1)
 
@@ -306,11 +303,11 @@ __global__ void dummy_supp_point(
     int xdim = 0; int ydim = 1;
 
     //once per block
-    if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
-        //add the point if it is in the face
-        new_verts[row] = blockIdx.x;
-        new_verts[row+1] = blockIdx.y;
-    }
+    //if ((threadIdx.x | threadIdx.y | threadIdx.z) == 0) {
+        ////add the point if it is in the face
+        //new_verts[row] = blockIdx.x;
+        //new_verts[row+1] = blockIdx.y;
+    //}
 
     return;
 

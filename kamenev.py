@@ -231,10 +231,10 @@ def _v_h_rep_given_init_simplex(init_simplex, supp_point_func, epsilon=1e-7):
             if error >= epsilon:
                 # add the point... at this point points may be added twice... this doesn't seem to matter
                 new_pts.append(supporting_pt)
-                all_new.append(list(supporting_pt))
-            else:
-                all_new.append(supporting_pt + [0])
-        print(f"ITER: {iteration} {np.asarray(all_new)}")
+            #    all_new.append(list(supporting_pt))
+            #else:
+                #all_new.append(supporting_pt + [0])
+        #print(f"ITER: {iteration} {np.asarray(all_new)}")
         #import pdb
         #pdb.set_trace()
     #points[hull.vertices]
@@ -297,7 +297,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
         #shared memory for max_vec
         #shared memory for rv_list
         shared_mem = 4 * (min_block_size[0] + min_block_size[1] + (min_block_size[0] + 1) * (min_block_size[1])) + 1 + 8 + 4
-        print(f"Shared mem size is {shared_mem}")
+        #print(f"Shared mem size is {shared_mem}")
         #import pdb
         #pdb.set_trace()
 
@@ -305,7 +305,7 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
         #spawn block and make device call for each simplex
         grid_dims = (len(hull.simplices), 1, 1)
         block_dims = (min_block_size[1], min_block_size[1], int(min_block_size[0]/min_block_size[1])+1)
-        print(block_dims)
+        #print(block_dims)
         #call cuda kernel for each stored (new) simplex IN: <simplices, first new index> OUT: <is_new_indices> 
         #find supporting points IN: <equations, center, transpose> OUT: <all verts supp pts>
         #product and add to find error <supp_point, jk
@@ -323,20 +323,20 @@ def _v_h_rep_given_init_simplex_gpu(init_simplex, gpu_func, min_block_size=5, ep
             np.dtype('int32').type(first_new_index),
             block=block_dims, grid=grid_dims, shared=shared_mem*8
         )
-        print("Made call")
+        #print("Made call")
         #wait for hull data copy to finish
         #pycuda.wait_for_async
-        cuda.Context.synchronize()
+        #cuda.Context.synchronize()
         cuda.memcpy_dtoh(new_verts, new_verts_GPU)
         new_verts = new_verts[~np.all(new_verts == 0, axis=1)] 
-        print(f"ITER: {iteration} {new_verts}")
+        #print(f"ITER: {iteration} {new_verts}")
         #import pdb
         #pdb.set_trace()
         if not repeat_iter:
             first_new_index = len(verts)
             verts = np.concatenate((verts, new_verts), axis=0) 
 
-    print("DONE ZONO")
+    #print("DONE ZONO")
 
     #points[hull.vertices]
     new_verts_GPU.free()
