@@ -1,10 +1,22 @@
 [![Build Status](https://travis-ci.org/stanleybak/quickzonoreach.svg?branch=master)](https://travis-ci.org/stanleybak/quickzonoreach)
 
+# NFM 2021 Artifacts #
+This repository includes the underlying quickzono code and added GPU parallelization code used in profiling. Selected relevant contents and purposes are listed below:
+*verts_kernel.cu* is the CUDA kernel and helper function used in projection
+*kernel_testing.py* is a unit testing script validating helper functions in the kernel
+*zono.py* is the underlying logic of the reachability computation - includes pycuda code for complication of kernel and host to device memory copies
+*kamenev.py* includes code for CPU and GPU based projection (including kernel call) and other utilities
+*zono_projection.py* programatically defines the runtime modes profiled in this paper
+
 # Quick Zono Reach #
 
 <p align="center"> <img src="examples/quickzonoreach.png" alt="zono reach set" width=400/> <img src="examples/hylaa.png" alt="Hylaa" width=375/> </p>
 
 Quickzonoreach is a `python3` library for quick computations of discrete-time reach sets using zonotopes, aiming to be suitable for online computation. The system model is `x' = A_i x + B_i u`, where `A_i` and `B_i` can change at each step (suitable for piecewise trajectory linearized models). The initial states are given as a box and each step can have its own box input constraints and time step.
+
+# GPU Additions #
+
+This branch includes work to support portions of the projection algorithm being performed on an NVIDIA GPU. Code was translated to a CUDA kernel without algorithmic modification.
 
 ## Important Functions ##
 
