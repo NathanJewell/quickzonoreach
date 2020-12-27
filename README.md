@@ -2,11 +2,11 @@
 
 # NFM 2021 Artifacts #
 This repository includes the underlying quickzono code and added GPU parallelization code used in profiling. Selected relevant contents and purposes are listed below:
-*verts_kernel.cu* is the CUDA kernel and helper function used in projection
-*kernel_testing.py* is a unit testing script validating helper functions in the kernel
-*zono.py* is the underlying logic of the reachability computation - includes pycuda code for complication of kernel and host to device memory copies
-*kamenev.py* includes code for CPU and GPU based projection (including kernel call) and other utilities
-*zono_projection.py* programatically defines the runtime modes profiled in this paper
+- *verts_kernel.cu* is the CUDA kernel and helper function used in projection
+- *kernel_testing.py* is a unit testing script validating helper functions in the kernel
+- *zono.py* is the underlying logic of the reachability computation - includes pycuda code for complication of kernel and host to device memory copies
+- *kamenev.py* includes code for CPU and GPU based projection (including kernel call) and other utilities
+- *zono_projection.py* programatically defines the runtime modes profiled in this paper
 
 # Quick Zono Reach #
 
